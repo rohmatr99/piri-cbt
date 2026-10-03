@@ -1,0 +1,15 @@
+DELETE FROM jawaban
+WHERE sesi_id IN (
+    SELECT id
+    FROM sesi_ujian
+    WHERE siswa_id = 1
+      AND ujian_id = 1
+);
+
+DELETE FROM hasil_ujian
+WHERE siswa_id = 1
+  AND ujian_id = 1;
+
+DELETE FROM sesi_ujian
+WHERE siswa_id = 1
+  AND ujian_id = 1;
