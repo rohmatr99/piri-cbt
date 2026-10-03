@@ -30,51 +30,84 @@ $error = "";
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
-    $username =
-        trim($_POST["username"] ?? "");
-
-    $password =
-        $_POST["password"] ?? "";
+    $username = trim($_POST["username"] ?? "");
+    $password = $_POST["password"] ?? "";
 
 
-    if (
-        $username === ""
-        ||
-        $password === ""
-    ) {
+    if ($username === "" || $password === "") {
 
-        $error =
-            "Username dan password wajib diisi.";
+        $error = "Username dan password wajib diisi.";
 
     } else {
 
         /*
-        |----------------------------------------------------------------------
-        | Untuk tahap testing kita gunakan admin sederhana.
-        |----------------------------------------------------------------------
+        |--------------------------------------------------------------------------
+        | Ambil akun admin berdasarkan username
+        |--------------------------------------------------------------------------
         */
 
-        if (
-            $username === "admin"
-            &&
-            $password === "admin123"
-        ) {
+        $stmt = $conn->prepare("
+            SELECT
+                id,
+                nama,
+                username,
+                password,
+                role,
+                status
+            FROM admin_users
+            WHERE username = ?
+            LIMIT 1
+        ");
 
-            $_SESSION["admin_id"] = 1;
+        $stmt->bind_param("s", $username);
 
-            $_SESSION["admin_nama"] =
-                "Administrator";
+        $stmt->execute();
 
-            header(
-                "Location: dashboard.php"
-            );
+        $result = $stmt->get_result();
 
-            exit;
+        $admin = $result->fetch_assoc();
+
+        $stmt->close();
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Periksa akun dan password
+        |--------------------------------------------------------------------------
+        */
+
+        if (!$admin) {
+
+            $error = "Username atau password salah.";
+
+        } elseif ($admin["status"] !== "aktif") {
+
+            $error = "Akun administrator tidak aktif.";
+
+        } elseif (!password_verify($password, $admin["password"])) {
+
+            $error = "Username atau password salah.";
 
         } else {
 
-            $error =
-                "Username atau password salah.";
+            /*
+            |--------------------------------------------------------------------------
+            | Login berhasil
+            |--------------------------------------------------------------------------
+            */
+
+            session_regenerate_id(true);
+
+            $_SESSION["admin_id"] = (int) $admin["id"];
+
+            $_SESSION["admin_nama"] = $admin["nama"];
+
+            $_SESSION["admin_username"] = $admin["username"];
+
+            $_SESSION["admin_role"] = $admin["role"];
+
+            header("Location: dashboard.php");
+            exit;
 
         }
 
@@ -188,6 +221,13 @@ button {
 }
 
 
+button:hover {
+
+    background: #157347;
+
+}
+
+
 .error {
 
     background: #f8d7da;
@@ -237,9 +277,7 @@ Login Administrator
 <?php endif; ?>
 
 
-<form
-    method="POST"
->
+<form method="POST">
 
 
 <label>
@@ -251,6 +289,7 @@ Username
     type="text"
     name="username"
     autocomplete="username"
+    autofocus
 >
 
 
@@ -266,9 +305,7 @@ Password
 >
 
 
-<button
-    type="submit"
->
+<button type="submit">
 
 MASUK
 
