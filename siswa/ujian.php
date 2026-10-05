@@ -909,6 +909,7 @@ button{ -webkit-tap-highlight-color:transparent; }
     }
 }
 
+.watermark-ujian{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-28deg);z-index:5;pointer-events:none;user-select:none;-webkit-user-select:none;color:rgba(100,116,139,.10);font-size:clamp(18px,3vw,30px);font-weight:800;letter-spacing:.08em;white-space:nowrap;text-align:center;max-width:90vw;}
 </style>
 
 </head>
@@ -916,6 +917,13 @@ button{ -webkit-tap-highlight-color:transparent; }
 
 <body>
 
+
+<!-- LEVEL 13 WATERMARK -->
+<div class="watermark-ujian" aria-hidden="true">
+    <?= htmlspecialchars((string)($_SESSION["nama"] ?? $_SESSION["nama_siswa"] ?? "SISWA")) ?>
+    • ID <?= (int)$siswa_id ?>
+    • <?= htmlspecialchars($ujian["nama_ujian"]) ?>
+</div>
 
 <div class="container">
 
@@ -1311,6 +1319,20 @@ Berikutnya →
 
 </div>
 
+
+<script>
+/* LEVEL 13 - block copy/paste/shortcuts without counting violations */
+(function(){
+"use strict";
+function editable(t){if(!t)return false;const x=(t.tagName||"").toLowerCase();return x==="input"||x==="textarea"||t.isContentEditable===true;}
+function mod(e){return e.ctrlKey||e.metaKey;}
+document.addEventListener("contextmenu",e=>e.preventDefault(),true);
+document.addEventListener("copy",e=>e.preventDefault(),true);
+document.addEventListener("cut",e=>e.preventDefault(),true);
+document.addEventListener("paste",e=>{const t=e.target,id=t&&t.id||"";if(editable(t)&&(id==="input-kode-pengawas"||id==="kode-pengawas"))return;e.preventDefault();},true);
+document.addEventListener("keydown",function(e){const k=String(e.key||"").toLowerCase(),t=e.target,id=t&&t.id||"";if(editable(t)&&(id==="input-kode-pengawas"||id==="kode-pengawas"))return;if(mod(e)&&["c","v","x","a","u","s","p"].includes(k)){e.preventDefault();e.stopPropagation();return;}if(e.key==="F12"){e.preventDefault();e.stopPropagation();return;}if(mod(e)&&e.shiftKey&&["i","j","c","k"].includes(k)){e.preventDefault();e.stopPropagation();return;}},true);
+})();
+</script>
 
 <script>
 function updateMinimalWaktu() {
@@ -2266,16 +2288,20 @@ function prosesPerubahanFullscreen() {
         ujianSudahSelesai ||
         sedangMemintaFullscreen ||
         sedangMemprosesKeluarFullscreen ||
-        ujianSedangTerkunci ||
-        document.visibilityState !== "visible"
+        ujianSedangTerkunci
     ) {
         return;
     }
 
     /*
-    | Desktop dapat memicu fullscreenchange, blur dan visibilitychange
-    | hampir bersamaan. Satu kejadian fullscreen keluar hanya boleh
-    | diproses satu kali.
+    | Desktop maupun HP dapat memicu fullscreenchange dan
+    | visibilitychange hampir bersamaan. Satu kejadian fullscreen
+    | keluar hanya boleh diproses satu kali.
+    |
+    | Penting: jangan mensyaratkan visibilityState = visible. Pada
+    | sebagian HP, keluar fullscreen justru memicu visibilitychange
+    | lebih dahulu. Jika menunggu halaman kembali visible, sesi belum
+    | sempat dikunci dan siswa dapat keluar fullscreen berkali-kali.
     */
     sedangMemprosesKeluarFullscreen = true;
 
