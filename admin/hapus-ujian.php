@@ -7,6 +7,9 @@ if (!isset($_SESSION["admin_id"])) {
     exit;
 }
 
+$admin_id = (int)($_SESSION["admin_id"] ?? 0);
+$admin_role = $_SESSION["admin_role"] ?? "admin";
+
 $id = isset($_GET["id"]) ? (int)$_GET["id"] : 0;
 
 if ($id <= 0) {
@@ -28,6 +31,24 @@ $ujian = $stmt->get_result()->fetch_assoc();
 
 if (!$ujian) {
     die("Ujian tidak ditemukan.");
+}
+
+if ($admin_role !== "superadmin") {
+    $stmt = $conn->prepare("
+        SELECT u.id
+        FROM ujian u
+        INNER JOIN admin_mapel am
+            ON am.mapel_id = u.mapel_id
+           AND am.admin_id = ?
+        WHERE u.id = ?
+        LIMIT 1
+    ");
+    $stmt->bind_param("ii", $admin_id, $id);
+    $stmt->execute();
+
+    if (!$stmt->get_result()->fetch_assoc()) {
+        die("Anda tidak memiliki akses ke ujian tersebut.");
+    }
 }
 
 /*

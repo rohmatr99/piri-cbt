@@ -7,6 +7,9 @@ if (!isset($_SESSION["admin_id"])) {
     exit;
 }
 
+$admin_id = (int)($_SESSION["admin_id"] ?? 0);
+$admin_role = $_SESSION["admin_role"] ?? "admin";
+
 $id = isset($_POST["id"]) ? (int)$_POST["id"] : 0;
 $ujian_id = isset($_POST["ujian_id"]) ? (int)$_POST["ujian_id"] : 0;
 $nomor = isset($_POST["nomor"]) ? (int)$_POST["nomor"] : 0;
@@ -38,6 +41,33 @@ foreach ($opsi_data as $kode => $teks) {
     if ($teks === "") {
         die("Pilihan jawaban $kode belum diisi.");
     }
+}
+
+/* Pastikan ujian dapat diakses admin */
+if ($admin_role === "superadmin") {
+    $stmt = $conn->prepare("
+        SELECT id
+        FROM ujian
+        WHERE id = ?
+        LIMIT 1
+    ");
+    $stmt->bind_param("i", $ujian_id);
+} else {
+    $stmt = $conn->prepare("
+        SELECT u.id
+        FROM ujian u
+        INNER JOIN admin_mapel am
+            ON am.mapel_id = u.mapel_id
+           AND am.admin_id = ?
+        WHERE u.id = ?
+        LIMIT 1
+    ");
+    $stmt->bind_param("ii", $admin_id, $ujian_id);
+}
+$stmt->execute();
+
+if (!$stmt->get_result()->fetch_assoc()) {
+    die("Anda tidak memiliki akses ke ujian tersebut.");
 }
 
 /* Cek nomor soal tidak bentrok */

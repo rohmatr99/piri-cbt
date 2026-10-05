@@ -1,7 +1,5 @@
 <?php
-
 session_start();
-
 require_once "../config/database.php";
 
 if (!isset($_SESSION["admin_id"])) {
@@ -9,68 +7,56 @@ if (!isset($_SESSION["admin_id"])) {
     exit;
 }
 
-$ujian_id = isset($_GET["ujian_id"])
-    ? (int) $_GET["ujian_id"]
-    : 0;
+$admin_id = (int)($_SESSION["admin_id"] ?? 0);
+$admin_role = $_SESSION["admin_role"] ?? "admin";
 
+$ujian_id = isset($_GET["ujian_id"]) ? (int)$_GET["ujian_id"] : 0;
 if ($ujian_id <= 0) {
     die("Ujian tidak valid.");
 }
 
-
-/*
-|--------------------------------------------------------------------------
-| DATA UJIAN
-|--------------------------------------------------------------------------
-*/
-
-$stmt = $conn->prepare("
-    SELECT
-        u.id,
-        u.nama_ujian,
-        u.kelas,
-        u.durasi,
-        m.nama AS nama_mapel
-    FROM ujian u
-    LEFT JOIN mata_pelajaran m
-        ON u.mapel_id = m.id
-    WHERE u.id = ?
-    LIMIT 1
-");
-
-$stmt->bind_param("i", $ujian_id);
+/* Admin biasa hanya boleh membuka ujian dari mapel yang ditugaskan. */
+if ($admin_role === "superadmin") {
+    $stmt = $conn->prepare("
+        SELECT u.id, u.nama_ujian, u.mapel_id, u.kelas, u.durasi,
+               m.nama AS nama_mapel
+        FROM ujian u
+        LEFT JOIN mata_pelajaran m ON u.mapel_id = m.id
+        WHERE u.id = ?
+        LIMIT 1
+    ");
+    $stmt->bind_param("i", $ujian_id);
+} else {
+    $stmt = $conn->prepare("
+        SELECT u.id, u.nama_ujian, u.mapel_id, u.kelas, u.durasi,
+               m.nama AS nama_mapel
+        FROM ujian u
+        INNER JOIN admin_mapel am
+            ON am.mapel_id = u.mapel_id
+           AND am.admin_id = ?
+        LEFT JOIN mata_pelajaran m ON u.mapel_id = m.id
+        WHERE u.id = ?
+        LIMIT 1
+    ");
+    $stmt->bind_param("ii", $admin_id, $ujian_id);
+}
 $stmt->execute();
-
 $ujian = $stmt->get_result()->fetch_assoc();
 
 if (!$ujian) {
-    die("Data ujian tidak ditemukan.");
+    http_response_code(403);
+    die("Akses ditolak. Ujian ini bukan mata pelajaran yang ditugaskan kepada Anda.");
 }
 
-
-/*
-|--------------------------------------------------------------------------
-| DATA SOAL
-|--------------------------------------------------------------------------
-*/
-
 $stmt = $conn->prepare("
-    SELECT
-        id,
-        nomor,
-        pertanyaan,
-        tipe,
-        bobot
+    SELECT id, nomor, pertanyaan, tipe, bobot
     FROM soal
     WHERE ujian_id = ?
     ORDER BY nomor ASC
 ");
-
 $stmt->bind_param("i", $ujian_id);
 $stmt->execute();
-
 $result = $stmt->get_result();
-
 ?>
 
 <!DOCTYPE html>

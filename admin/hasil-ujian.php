@@ -4,7 +4,6 @@ session_start();
 
 require_once "../config/database.php";
 
-
 /*
 |--------------------------------------------------------------------------
 | CEK LOGIN ADMIN
@@ -12,14 +11,14 @@ require_once "../config/database.php";
 */
 
 if (!isset($_SESSION["admin_id"])) {
-
     header("Location: login.php");
     exit;
-
 }
 
 $current_page = basename($_SERVER["PHP_SELF"]);
 
+$admin_id   = (int)($_SESSION["admin_id"] ?? 0);
+$admin_role = $_SESSION["admin_role"] ?? "admin";
 
 /*
 |--------------------------------------------------------------------------
@@ -28,42 +27,55 @@ $current_page = basename($_SERVER["PHP_SELF"]);
 */
 
 $ujian_id = isset($_GET["ujian_id"])
-    ? (int) $_GET["ujian_id"]
+    ? (int)$_GET["ujian_id"]
     : 0;
 
-$kelas = trim(
-    $_GET["kelas"] ?? ""
-);
+$kelas = trim($_GET["kelas"] ?? "");
 
 $siswa_id = isset($_GET["siswa_id"])
-    ? (int) $_GET["siswa_id"]
+    ? (int)$_GET["siswa_id"]
     : 0;
-
 
 /*
 |--------------------------------------------------------------------------
-| AMBIL DAFTAR UJIAN
+| AMBIL DAFTAR UJIAN SESUAI HAK AKSES
 |--------------------------------------------------------------------------
 */
 
-$result_ujian = $conn->query("
-    SELECT
-        id,
-        nama_ujian
-    FROM ujian
-    ORDER BY id DESC
-");
+if ($admin_role === "superadmin") {
 
+    $stmtUjian = $conn->prepare("
+        SELECT
+            id,
+            nama_ujian
+        FROM ujian
+        ORDER BY id DESC
+    ");
 
-if (!$result_ujian) {
+} else {
 
+    $stmtUjian = $conn->prepare("
+        SELECT DISTINCT
+            u.id,
+            u.nama_ujian
+        FROM ujian u
+        INNER JOIN admin_mapel am
+            ON am.mapel_id = u.mapel_id
+           AND am.admin_id = ?
+        ORDER BY u.id DESC
+    ");
+
+    $stmtUjian->bind_param("i", $admin_id);
+}
+
+if (!$stmtUjian || !$stmtUjian->execute()) {
     die(
         "Gagal mengambil daftar ujian: "
         . $conn->error
     );
-
 }
 
+$result_ujian = $stmtUjian->get_result();
 
 /*
 |--------------------------------------------------------------------------
@@ -79,16 +91,12 @@ $result_kelas = $conn->query("
     ORDER BY kelas ASC
 ");
 
-
 if (!$result_kelas) {
-
     die(
         "Gagal mengambil daftar kelas: "
         . $conn->error
     );
-
 }
-
 
 /*
 |--------------------------------------------------------------------------
@@ -106,16 +114,12 @@ $result_siswa = $conn->query("
     ORDER BY nama ASC
 ");
 
-
 if (!$result_siswa) {
-
     die(
         "Gagal mengambil daftar siswa: "
         . $conn->error
     );
-
 }
-
 
 /*
 |--------------------------------------------------------------------------
@@ -147,15 +151,32 @@ $sql = "
 
     LEFT JOIN ujian u
         ON h.ujian_id = u.id
-
-    WHERE 1 = 1
 ";
 
+/*
+|--------------------------------------------------------------------------
+| BATAS AKSES MAPEL UNTUK ADMIN/GURU
+|--------------------------------------------------------------------------
+*/
 
 $params = [];
-
 $types = "";
 
+if ($admin_role !== "superadmin") {
+
+    $sql .= "
+        INNER JOIN admin_mapel am_hasil
+            ON am_hasil.mapel_id = u.mapel_id
+           AND am_hasil.admin_id = ?
+    ";
+
+    $params[] = $admin_id;
+    $types .= "i";
+}
+
+$sql .= "
+    WHERE 1 = 1
+";
 
 /*
 |--------------------------------------------------------------------------
@@ -170,11 +191,8 @@ if ($ujian_id > 0) {
     ";
 
     $params[] = $ujian_id;
-
     $types .= "i";
-
 }
-
 
 /*
 |--------------------------------------------------------------------------
@@ -189,11 +207,8 @@ if ($kelas !== "") {
     ";
 
     $params[] = $kelas;
-
     $types .= "s";
-
 }
-
 
 /*
 |--------------------------------------------------------------------------
@@ -208,11 +223,8 @@ if ($siswa_id > 0) {
     ";
 
     $params[] = $siswa_id;
-
     $types .= "i";
-
 }
-
 
 /*
 |--------------------------------------------------------------------------
@@ -224,7 +236,6 @@ $sql .= "
     ORDER BY h.id DESC
 ";
 
-
 /*
 |--------------------------------------------------------------------------
 | JALANKAN QUERY
@@ -233,16 +244,12 @@ $sql .= "
 
 $stmt = $conn->prepare($sql);
 
-
 if (!$stmt) {
-
     die(
         "Query gagal: "
         . $conn->error
     );
-
 }
-
 
 if (count($params) > 0) {
 
@@ -253,22 +260,16 @@ if (count($params) > 0) {
 
 }
 
-
 $stmt->execute();
 
-$result =
-    $stmt->get_result();
-
+$result = $stmt->get_result();
 
 if (!$result) {
-
     die(
         "Gagal mengambil hasil ujian: "
         . $stmt->error
     );
-
 }
-
 
 /*
 |--------------------------------------------------------------------------
@@ -285,17 +286,15 @@ $nilai_tertinggi = null;
 
 $nilai_terendah = null;
 
-
 while (
     $data_rekap =
     $result->fetch_assoc()
 ) {
 
     $nilai =
-        (float) $data_rekap["nilai"];
+        (float)$data_rekap["nilai"];
 
     $total_nilai += $nilai;
-
 
     if (
         $nilai_tertinggi === null ||
@@ -306,7 +305,6 @@ while (
             $nilai;
 
     }
-
 
     if (
         $nilai_terendah === null ||
@@ -319,7 +317,6 @@ while (
     }
 
 }
-
 
 /*
 |--------------------------------------------------------------------------
@@ -336,7 +333,6 @@ if ($total_peserta > 0) {
         $total_peserta;
 
 }
-
 
 /*
 |--------------------------------------------------------------------------

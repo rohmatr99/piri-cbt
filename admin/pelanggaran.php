@@ -62,11 +62,13 @@ while ($row = $result_kelas->fetch_assoc()) {
 
 $daftar_mapel = [];
 
+$admin_id = (int) ($_SESSION["admin_id"] ?? 0);
+$admin_role = $_SESSION["admin_role"] ?? "admin";
+
 $result_mapel = $conn->query("
-    SELECT
-        id,
-        nama
+    SELECT id, nama
     FROM mata_pelajaran
+    " . ($admin_role === "superadmin" ? "" : " WHERE id IN (SELECT mapel_id FROM admin_mapel WHERE admin_id = {$admin_id})") . "
     ORDER BY nama ASC
 ");
 
@@ -86,10 +88,9 @@ while ($row = $result_mapel->fetch_assoc()) {
 $daftar_ujian = [];
 
 $result_ujian = $conn->query("
-    SELECT
-        id,
-        nama_ujian
+    SELECT id, nama_ujian
     FROM ujian
+    " . ($admin_role === "superadmin" ? "" : " WHERE mapel_id IN (SELECT mapel_id FROM admin_mapel WHERE admin_id = {$admin_id})") . "
     ORDER BY nama_ujian ASC
 ");
 
@@ -143,6 +144,10 @@ $sql = "
 
     WHERE 1 = 1
 ";
+
+if ($admin_role !== "superadmin") {
+    $sql .= " AND u.mapel_id IN (SELECT mapel_id FROM admin_mapel WHERE admin_id = {$admin_id})";
+}
 
 
 $params = [];
@@ -356,474 +361,412 @@ function e($text)
 
 ?>
 
-<!DOCTYPE html>
+<?php
+$page_title = "Pelanggaran Ujian";
+$page_description = "Periksa aktivitas pelanggaran siswa selama ujian";
 
-<html lang="id">
-
-<head>
-
-<meta charset="UTF-8">
-
-<meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
->
-
-<title>
-    Data Pelanggaran
-</title>
-
-
+require __DIR__ . "/includes/header.php";
+require __DIR__ . "/includes/sidebar.php";
+?>
 <style>
 
-* {
+/* =========================================================
+   HALAMAN PELANGGARAN - PROFESSIONAL ADMIN STYLE
+========================================================= */
+
+/* Area halaman menggunakan lebar penuh */
+.main .content {
+    max-width: none;
+    width: 100%;
+}
+
+.pelanggaran-page {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+}
+
+.pelanggaran-container {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+}
+
+
+/* =========================================================
+   JUDUL HALAMAN
+========================================================= */
+
+.pelanggaran-page .header {
+    margin: 0 0 22px;
+}
+
+.pelanggaran-page .header h1 {
+    margin: 0 0 7px;
+    font-size: 28px;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.25;
+}
+
+.pelanggaran-page .header p {
+    margin: 0;
+    color: #64748b;
+    font-size: 14px;
+}
+
+
+/* =========================================================
+   RINGKASAN STATISTIK
+========================================================= */
+
+.pelanggaran-page .summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    margin: 0 0 20px;
+}
+
+.pelanggaran-page .summary .box {
+    position: relative;
+    overflow: hidden;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 20px 22px;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.pelanggaran-page .summary .box::after {
+    content: "";
+    position: absolute;
+    right: -25px;
+    top: -25px;
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    background: rgba(37, 99, 235, 0.06);
+}
+
+.pelanggaran-page .summary .label {
+    margin-bottom: 8px;
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.pelanggaran-page .summary .number {
+    color: #0f172a;
+    font-size: 30px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+
+/* =========================================================
+   FILTER
+========================================================= */
+
+.pelanggaran-page .filter {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.pelanggaran-filter-grid {
+    display: grid;
+    grid-template-columns:
+        minmax(180px, 1.2fr)
+        minmax(150px, 1fr)
+        minmax(170px, 1fr)
+        minmax(190px, 1.1fr);
+    gap: 16px;
+}
+
+.pelanggaran-field label {
+    display: block;
+    margin-bottom: 7px;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.pelanggaran-field input,
+.pelanggaran-field select {
+    width: 100%;
+    height: 42px;
+    padding: 0 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #0f172a;
+    font-size: 14px;
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
     box-sizing: border-box;
 }
 
-body {
-
-    margin: 0;
-
-    font-family:
-        Arial,
-        Helvetica,
-        sans-serif;
-
-    background: #f4f6f9;
-
-    color: #212529;
-
+.pelanggaran-field input:focus,
+.pelanggaran-field select:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, .10);
 }
-
-
-.container {
-
-    max-width: 1400px;
-
-    margin: 30px auto;
-
-    padding: 0 20px;
-
-}
-
-
-.header {
-
-    background: white;
-
-    padding: 20px;
-
-    border-radius: 10px;
-
-    margin-bottom: 20px;
-
-    box-shadow:
-        0 2px 8px rgba(0,0,0,.08);
-
-}
-
-
-.header h1 {
-
-    margin: 0 0 8px 0;
-
-}
-
-
-.header p {
-
-    margin: 0;
-
-    color: #6c757d;
-
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| RINGKASAN
-|--------------------------------------------------------------------------
-*/
-
-.summary {
-
-    display: grid;
-
-    grid-template-columns:
-        repeat(2, 1fr);
-
-    gap: 15px;
-
-    margin-bottom: 20px;
-
-}
-
-
-.box {
-
-    background: white;
-
-    padding: 20px;
-
-    border-radius: 10px;
-
-    box-shadow:
-        0 2px 8px rgba(0,0,0,.08);
-
-}
-
-
-.box .label {
-
-    color: #6c757d;
-
-    font-size: 14px;
-
-}
-
-
-.box .number {
-
-    font-size: 30px;
-
-    font-weight: bold;
-
-    margin-top: 5px;
-
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| FILTER
-|--------------------------------------------------------------------------
-*/
-
-.filter {
-
-    background: white;
-
-    padding: 20px;
-
-    border-radius: 10px;
-
-    margin-bottom: 20px;
-
-    box-shadow:
-        0 2px 8px rgba(0,0,0,.08);
-
-}
-
-
-.filter-grid {
-
-    display: grid;
-
-    grid-template-columns:
-        repeat(4, 1fr);
-
-    gap: 15px;
-
-}
-
-
-.field label {
-
-    display: block;
-
-    font-weight: bold;
-
-    margin-bottom: 6px;
-
-}
-
-
-.field input,
-.field select {
-
-    width: 100%;
-
-    padding: 10px;
-
-    border: 1px solid #ced4da;
-
-    border-radius: 6px;
-
-    background: white;
-
-}
-
 
 .filter-actions {
-
-    margin-top: 15px;
-
     display: flex;
-
-    gap: 10px;
-
-    flex-wrap: wrap;
-
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
 }
 
-
-.btn {
-
-    display: inline-block;
-
-    padding: 10px 16px;
-
-    border: none;
-
-    border-radius: 6px;
-
+.pelanggaran-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    padding: 0 15px;
+    border: 0;
+    border-radius: 8px;
+    color: #ffffff;
     text-decoration: none;
-
+    font-size: 13px;
+    font-weight: 700;
     cursor: pointer;
+    transition: transform .15s, opacity .15s;
+}
 
-    font-size: 14px;
+.pelanggaran-btn:hover {
+    opacity: .92;
+    transform: translateY(-1px);
+}
 
+.pelanggaran-filter {
+    background: #2563eb;
+}
+
+.pelanggaran-reset {
+    background: #64748b;
 }
 
 
-.btn-filter {
-
-    background: #0d6efd;
-
-    color: white;
-
-}
-
-
-.btn-reset {
-
-    background: #6c757d;
-
-    color: white;
-
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| TABEL
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   TABEL UTAMA
+========================================================= */
 
 .table-box {
-
-    background: white;
-
-    border-radius: 10px;
-
     overflow: hidden;
-
-    box-shadow:
-        0 2px 8px rgba(0,0,0,.08);
-
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 }
 
-
-.table-wrapper {
-
+.pelanggaran-table-wrap {
+    width: 100%;
     overflow-x: auto;
-
 }
 
-
-table {
-
+.pelanggaran-table {
     width: 100%;
-
-    border-collapse: collapse;
-
     min-width: 950px;
-
-}
-
-
-th,
-td {
-
-    padding: 12px;
-
-    border-bottom: 1px solid #dee2e6;
-
-    text-align: left;
-
-}
-
-
-th {
-
-    background: #f8f9fa;
-
-    white-space: nowrap;
-
-}
-
-
-.badge {
-
-    display: inline-block;
-
-    padding: 5px 8px;
-
-    border-radius: 5px;
-
-    background: #fff3cd;
-
-    color: #856404;
-
-    font-size: 13px;
-
-    font-weight: bold;
-
-}
-
-
-.empty {
-
-    padding: 40px;
-
-    text-align: center;
-
-    color: #6c757d;
-
-}
-
-
-.detail-row {
-
-    display: none;
-
-    background: #f8f9fa;
-
-}
-
-
-.detail-row td {
-
-    padding: 0;
-
-}
-
-
-.detail-box {
-
-    padding: 15px 20px 20px 55px;
-
-    border-top: 1px solid #e9ecef;
-
-}
-
-
-.detail-title {
-
-    font-weight: bold;
-
-    margin-bottom: 10px;
-
-    color: #495057;
-
-}
-
-
-.detail-table {
-
-    width: 100%;
-
-    min-width: 500px;
-
     border-collapse: collapse;
-
-    background: white;
-
 }
 
+.pelanggaran-table th {
+    padding: 14px 13px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 800;
+    text-align: left;
+    white-space: nowrap;
+}
 
-.detail-table th,
-.detail-table td {
-
-    padding: 8px 10px;
-
-    border-bottom: 1px solid #dee2e6;
-
+.pelanggaran-table td {
+    padding: 14px 13px;
+    border-bottom: 1px solid #eef2f7;
+    color: #334155;
     font-size: 13px;
+    vertical-align: middle;
+}
 
+.pelanggaran-table tbody tr:hover {
+    background: #f8fafc;
+}
+
+.pelanggaran-table td strong {
+    color: #0f172a;
+    font-weight: 700;
+}
+
+.pelanggaran-table td small {
+    color: #94a3b8;
+    font-size: 11px;
 }
 
 
-.detail-table th {
+/* =========================================================
+   BADGE JUMLAH PELANGGARAN
+========================================================= */
 
-    background: #f1f3f5;
-
+.pelanggaran-table .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px !important;
+    height: 28px;
+    padding: 0 9px;
+    border-radius: 999px !important;
+    background: #fee2e2 !important;
+    color: #b91c1c !important;
+    font-size: 12px !important;
+    font-weight: 800;
 }
 
+
+/* =========================================================
+   TOMBOL DETAIL
+========================================================= */
 
 .btn-detail {
-
-    background: #0d6efd;
-
-    color: white;
-
-    padding: 7px 12px;
-
-    border: none;
-
-    border-radius: 5px;
-
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 0 11px;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    background: #ffffff;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 700;
     cursor: pointer;
-
-    font-size: 13px;
-
 }
-
 
 .btn-detail:hover {
-
-    opacity: .9;
-
+    background: #f1f5f9;
 }
 
 
-@media (max-width: 900px) {
+/* =========================================================
+   BARIS DETAIL
+========================================================= */
 
-    .filter-grid {
+.detail-row {
+    display: none;
+}
 
-        grid-template-columns:
-            repeat(2, 1fr);
+.detail-row td {
+    padding: 0 !important;
+    background: #f8fafc;
+}
 
+.detail-box {
+    padding: 18px 22px 20px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.detail-title {
+    margin-bottom: 12px;
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.detail-table {
+    width: 100%;
+    max-width: 760px;
+    border-collapse: collapse;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.detail-table th {
+    padding: 10px 12px;
+    background: #f1f5f9;
+    border-bottom: 1px solid #e2e8f0;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 800;
+    text-align: left;
+}
+
+.detail-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #eef2f7;
+    color: #475569;
+    font-size: 12px;
+}
+
+.detail-table tr:last-child td {
+    border-bottom: 0;
+}
+
+
+/* =========================================================
+   DATA KOSONG
+========================================================= */
+
+.empty,
+.pelanggaran-empty {
+    padding: 45px 20px !important;
+    color: #94a3b8 !important;
+    text-align: center !important;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+========================================================= */
+
+@media (max-width: 1100px) {
+
+    .pelanggaran-filter-grid {
+        grid-template-columns: 1fr 1fr;
     }
 
 }
 
+@media (max-width: 700px) {
 
-@media (max-width: 600px) {
-
-    .filter-grid {
-
+    .pelanggaran-page .summary {
         grid-template-columns: 1fr;
-
     }
 
-    .summary {
-
+    .pelanggaran-filter-grid {
         grid-template-columns: 1fr;
+    }
 
+    .pelanggaran-page .header h1 {
+        font-size: 23px;
+    }
+
+    .pelanggaran-page .filter {
+        padding: 15px;
+    }
+
+    .pelanggaran-page .summary .box {
+        padding: 16px;
     }
 
 }
 
 </style>
+<main class="main">
+<header class="topbar"><div class="page-title"><h1><?= htmlspecialchars($page_title) ?></h1><p><?= htmlspecialchars($page_description) ?></p></div><div class="top-user"><div class="top-user-icon">👤</div><span><?= htmlspecialchars($_SESSION["admin_nama"] ?? "Administrator") ?></span></div></header>
+<header class="mobile-header"><button type="button" class="menu-button" onclick="bukaSidebar()">☰</button><div class="mobile-title">PIRI CBT — Admin</div><div style="width:40px;"></div></header>
+<section class="content">
+<div class="pelanggaran-page">
 
-</head>
 
 
-<body>
-
-
-<div class="container">
+<div class="pelanggaran-container">
 
 
 <div class="header">
@@ -886,10 +829,10 @@ th {
 >
 
 
-<div class="filter-grid">
+<div class="pelanggaran-filter-grid">
 
 
-<div class="field">
+<div class="pelanggaran-field">
 
 <label>
     Nama Siswa
@@ -905,7 +848,7 @@ th {
 </div>
 
 
-<div class="field">
+<div class="pelanggaran-field">
 
 <label>
     Kelas
@@ -936,7 +879,7 @@ th {
 </div>
 
 
-<div class="field">
+<div class="pelanggaran-field">
 
 <label>
     Mapel
@@ -967,7 +910,7 @@ th {
 </div>
 
 
-<div class="field">
+<div class="pelanggaran-field">
 
 <label>
     Jenis / Nama Ujian
@@ -1005,7 +948,7 @@ th {
 
 <button
     type="submit"
-    class="btn btn-filter"
+    class="pelanggaran-btn pelanggaran-filter"
 >
     🔍 Terapkan Filter
 </button>
@@ -1013,7 +956,7 @@ th {
 
 <a
     href="pelanggaran.php"
-    class="btn btn-reset"
+    class="pelanggaran-btn pelanggaran-reset"
 >
     Reset Filter
 </a>
@@ -1032,9 +975,9 @@ th {
 
 <div class="table-box">
 
-<div class="table-wrapper">
+<div class="pelanggaran-table-wrap">
 
-<table>
+<table class="pelanggaran-table">
 
 <thead>
 
@@ -1298,6 +1241,8 @@ function toggleDetail(id, button) {
 
 </script>
 
-</body>
 
-</html>
+</div>
+</section>
+</main>
+<?php require __DIR__ . "/includes/footer.php"; ?>

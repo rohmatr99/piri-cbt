@@ -7,6 +7,9 @@ if (!isset($_SESSION["admin_id"])) {
     exit;
 }
 
+$admin_id = (int)($_SESSION["admin_id"] ?? 0);
+$admin_role = $_SESSION["admin_role"] ?? "admin";
+
 /* Ambil data dari form */
 $id = (int)($_POST["id"] ?? 0);
 $nama_ujian = trim($_POST["nama_ujian"] ?? "");
@@ -43,13 +46,27 @@ if (!in_array($status, ["aktif", "nonaktif"], true)) {
     die("Status ujian tidak valid.");
 }
 
-/* Pastikan ujian memang ada */
-$stmt = $conn->prepare("
-    SELECT id
-    FROM ujian
-    WHERE id = ?
-    LIMIT 1
-");
+/* Pastikan ujian memang ada dan boleh diakses admin */
+if ($admin_role === "superadmin") {
+    $stmt = $conn->prepare("
+        SELECT id, mapel_id
+        FROM ujian
+        WHERE id = ?
+        LIMIT 1
+    ");
+    $stmt->bind_param("i", $id);
+} else {
+    $stmt = $conn->prepare("
+        SELECT u.id, u.mapel_id
+        FROM ujian u
+        INNER JOIN admin_mapel am
+            ON am.mapel_id = u.mapel_id
+           AND am.admin_id = ?
+        WHERE u.id = ?
+        LIMIT 1
+    ");
+    $stmt->bind_param("ii", $admin_id, $id);
+}
 
 $stmt->bind_param("i", $id);
 $stmt->execute();
@@ -75,6 +92,22 @@ $cekMapel = $stmt->get_result()->fetch_assoc();
 
 if (!$cekMapel) {
     die("Mata pelajaran tidak ditemukan.");
+}
+
+/* Admin hanya boleh memakai mapel yang ditugaskan */
+if ($admin_role !== "superadmin") {
+    $stmt = $conn->prepare("
+        SELECT id
+        FROM admin_mapel
+        WHERE admin_id = ? AND mapel_id = ?
+        LIMIT 1
+    ");
+    $stmt->bind_param("ii", $admin_id, $mapel_id);
+    $stmt->execute();
+
+    if (!$stmt->get_result()->fetch_assoc()) {
+        die("Anda tidak memiliki akses ke mata pelajaran tersebut.");
+    }
 }
 
 /* Cek token tidak boleh dipakai ujian lain */

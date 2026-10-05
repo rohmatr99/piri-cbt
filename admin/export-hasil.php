@@ -6,6 +6,9 @@ if (!isset($_SESSION["admin_id"])) {
     exit;
 }
 
+$admin_id = (int)($_SESSION["admin_id"] ?? 0);
+$admin_role = $_SESSION["admin_role"] ?? "admin";
+
 require_once "../config/database.php";
 
 // Ambil filter
@@ -34,6 +37,17 @@ $sql = "
 
 $params = [];
 $types = "";
+
+if ($admin_role !== "superadmin") {
+    $sql .= " AND EXISTS (
+        SELECT 1
+        FROM admin_mapel am
+        WHERE am.admin_id = ?
+          AND am.mapel_id = u.mapel_id
+    )";
+    $types .= "i";
+    $params[] = $admin_id;
+}
 
 // Filter ujian
 if ($ujian_id > 0) {

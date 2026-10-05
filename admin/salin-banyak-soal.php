@@ -4,10 +4,19 @@ session_start();
 
 require_once "../config/database.php";
 
+
+/* =========================
+   CEK LOGIN
+========================= */
+
 if (!isset($_SESSION["admin_id"])) {
     header("Location: login.php");
     exit;
 }
+
+
+$admin_id = (int)($_SESSION["admin_id"] ?? 0);
+$admin_role = $_SESSION["admin_role"] ?? "admin";
 
 
 /* =========================
@@ -48,58 +57,216 @@ if (count($soal_ids) === 0) {
 
 $soal = [];
 
+$mapel_ids = [];
+
+
 foreach ($soal_ids as $id) {
 
-    $stmt = $conn->prepare("
-        SELECT
-            s.id,
-            s.ujian_id,
-            s.nomor,
-            s.pertanyaan,
-            s.tipe,
-            s.bobot,
-            u.nama_ujian,
-            u.kelas
-        FROM soal s
-        LEFT JOIN ujian u
-            ON s.ujian_id = u.id
-        WHERE s.id = ?
-        LIMIT 1
-    ");
+    if ($admin_role === "superadmin") {
 
-    $stmt->bind_param("i", $id);
+        $stmt = $conn->prepare("
+            SELECT
+                s.id,
+                s.ujian_id,
+                s.nomor,
+                s.pertanyaan,
+                s.tipe,
+                s.bobot,
+                u.nama_ujian,
+                u.kelas,
+                u.mapel_id,
+                m.nama AS nama_mapel
+            FROM soal s
+            INNER JOIN ujian u
+                ON u.id = s.ujian_id
+            LEFT JOIN mata_pelajaran m
+                ON m.id = u.mapel_id
+            WHERE s.id = ?
+            LIMIT 1
+        ");
+
+        $stmt->bind_param(
+            "i",
+            $id
+        );
+
+    } else {
+
+        $stmt = $conn->prepare("
+            SELECT
+                s.id,
+                s.ujian_id,
+                s.nomor,
+                s.pertanyaan,
+                s.tipe,
+                s.bobot,
+                u.nama_ujian,
+                u.kelas,
+                u.mapel_id,
+                m.nama AS nama_mapel
+            FROM soal s
+            INNER JOIN ujian u
+                ON u.id = s.ujian_id
+            INNER JOIN admin_mapel am
+                ON am.mapel_id = u.mapel_id
+               AND am.admin_id = ?
+            LEFT JOIN mata_pelajaran m
+                ON m.id = u.mapel_id
+            WHERE s.id = ?
+            LIMIT 1
+        ");
+
+        $stmt->bind_param(
+            "ii",
+            $admin_id,
+            $id
+        );
+    }
+
+
     $stmt->execute();
 
     $result = $stmt->get_result();
 
     $row = $result->fetch_assoc();
 
-    if ($row) {
-        $soal[] = $row;
+    $stmt->close();
+
+
+    if (!$row) {
+        die(
+            "Soal ID " .
+            $id .
+            " tidak ditemukan atau Anda tidak memiliki akses."
+        );
     }
-}
 
 
-if (count($soal) === 0) {
-    die("Soal tidak ditemukan.");
+    $soal[] = $row;
+
+    $mapel_ids[] = (int)$row["mapel_id"];
 }
 
 
 /* =========================
-   AMBIL DAFTAR UJIAN
+   PASTIKAN SEMUA SOAL
+   BERASAL DARI MAPEL SAMA
 ========================= */
 
-$resultUjian = $conn->query("
-    SELECT
-        id,
-        nama_ujian,
-        kelas
-    FROM ujian
-    ORDER BY id DESC
-");
+$mapel_ids = array_values(
+    array_unique($mapel_ids)
+);
+
+
+if (count($mapel_ids) !== 1) {
+
+    die("
+        <div style='
+            font-family: Arial, sans-serif;
+            max-width: 700px;
+            margin: 50px auto;
+            padding: 25px;
+            border: 1px solid #fecaca;
+            border-radius: 10px;
+            background: #fff;
+        '>
+
+            <h2 style='color: #dc2626;'>
+                Soal Berasal dari Mapel Berbeda
+            </h2>
+
+            <p>
+                Salin banyak soal hanya dapat dilakukan
+                jika semua soal yang dipilih berasal dari
+                mata pelajaran yang sama.
+            </p>
+
+            <p>
+                Silakan kembali ke Bank Soal dan pilih
+                soal dari satu mata pelajaran saja.
+            </p>
+
+            <br>
+
+            <a
+                href='bank-soal.php'
+                style='
+                    display: inline-block;
+                    padding: 10px 16px;
+                    background: #2563eb;
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 6px;
+                '
+            >
+                ← Kembali ke Bank Soal
+            </a>
+
+        </div>
+    ");
+
+}
+
+
+$mapel_id = $mapel_ids[0];
+
+$nama_mapel = $soal[0]["nama_mapel"] ?? "-";
+
+
+/* =========================
+   AMBIL DAFTAR UJIAN
+   HANYA MAPEL YANG SAMA
+========================= */
+
+if ($admin_role === "superadmin") {
+
+    $stmtUjian = $conn->prepare("
+        SELECT
+            u.id,
+            u.nama_ujian,
+            u.kelas,
+            u.mapel_id
+        FROM ujian u
+        WHERE u.mapel_id = ?
+        ORDER BY u.id DESC
+    ");
+
+    $stmtUjian->bind_param(
+        "i",
+        $mapel_id
+    );
+
+} else {
+
+    $stmtUjian = $conn->prepare("
+        SELECT
+            u.id,
+            u.nama_ujian,
+            u.kelas,
+            u.mapel_id
+        FROM ujian u
+        INNER JOIN admin_mapel am
+            ON am.mapel_id = u.mapel_id
+           AND am.admin_id = ?
+        WHERE u.mapel_id = ?
+        ORDER BY u.id DESC
+    ");
+
+    $stmtUjian->bind_param(
+        "ii",
+        $admin_id,
+        $mapel_id
+    );
+}
+
+
+$stmtUjian->execute();
+
+$resultUjian = $stmtUjian->get_result();
+
 
 if (!$resultUjian) {
-    die("Gagal mengambil daftar ujian: " . $conn->error);
+    die("Gagal mengambil daftar ujian.");
 }
 
 ?>
@@ -160,6 +327,7 @@ body {
     padding: 15px;
     border-radius: 6px;
     margin-bottom: 15px;
+    line-height: 1.7;
 }
 
 .soal-item {
@@ -211,6 +379,13 @@ select {
     color: white;
 }
 
+.warning {
+    background: #fff7ed;
+    border-left: 4px solid #f97316;
+    padding: 12px;
+    margin-bottom: 15px;
+}
+
 </style>
 
 </head>
@@ -243,8 +418,16 @@ select {
 
             <br>
 
-            Pilih ujian tujuan untuk menyalin
-            semua soal tersebut.
+            <strong>
+                Mata Pelajaran:
+            </strong>
+
+            <?= htmlspecialchars($nama_mapel) ?>
+
+            <br>
+
+            Semua soal yang dipilih harus berasal
+            dari mata pelajaran yang sama.
 
         </div>
 
@@ -294,67 +477,32 @@ select {
 
         <h3>🎯 Ujian Tujuan</h3>
 
-        <form
-            action="proses-salin-banyak-soal.php"
-            method="POST"
-        >
+
+        <?php if ($resultUjian->num_rows === 0): ?>
+
+            <div class="warning">
+
+                <strong>
+                    Belum ada ujian tujuan.
+                </strong>
+
+                <br><br>
+
+                Tidak ada ujian lain pada mata pelajaran:
+
+                <strong>
+                    <?= htmlspecialchars($nama_mapel) ?>
+                </strong>
+
+            </div>
 
 
-            <?php foreach ($soal_ids as $id): ?>
-
-                <input
-                    type="hidden"
-                    name="soal_ids[]"
-                    value="<?= (int)$id ?>"
-                >
-
-            <?php endforeach; ?>
-
-
-            <label>
-                Pilih Ujian Tujuan
-            </label>
-
-
-            <select
-                name="ujian_tujuan_id"
-                required
-            >
-
-                <option value="">
-                    -- Pilih Ujian Tujuan --
-                </option>
-
-
-                <?php while ($ujian = $resultUjian->fetch_assoc()): ?>
-
-                    <option
-                        value="<?= (int)$ujian["id"] ?>"
-                    >
-
-                        <?= htmlspecialchars(
-                            $ujian["nama_ujian"]
-                        ) ?>
-
-                        -
-                        <?= htmlspecialchars(
-                            $ujian["kelas"]
-                        ) ?>
-
-                    </option>
-
-                <?php endwhile; ?>
-
-            </select>
-
-
-            <button
-                type="submit"
+            <a
+                href="ujian.php"
                 class="tombol salin"
             >
-                📋 Salin Semua Soal
-            </button>
-
+                ➕ Buat Ujian Baru
+            </a>
 
             <a
                 href="bank-soal.php"
@@ -363,7 +511,83 @@ select {
                 ← Kembali ke Bank Soal
             </a>
 
-        </form>
+
+        <?php else: ?>
+
+
+            <form
+                action="proses-salin-banyak-soal.php"
+                method="POST"
+            >
+
+
+                <?php foreach ($soal_ids as $id): ?>
+
+                    <input
+                        type="hidden"
+                        name="soal_ids[]"
+                        value="<?= (int)$id ?>"
+                    >
+
+                <?php endforeach; ?>
+
+
+                <label>
+                    Pilih Ujian Tujuan
+                </label>
+
+
+                <select
+                    name="ujian_tujuan_id"
+                    required
+                >
+
+                    <option value="">
+                        -- Pilih Ujian Tujuan --
+                    </option>
+
+
+                    <?php while ($ujian = $resultUjian->fetch_assoc()): ?>
+
+                        <option
+                            value="<?= (int)$ujian["id"] ?>"
+                        >
+
+                            <?= htmlspecialchars(
+                                $ujian["nama_ujian"]
+                            ) ?>
+
+                            -
+                            <?= htmlspecialchars(
+                                $ujian["kelas"]
+                            ) ?>
+
+                        </option>
+
+                    <?php endwhile; ?>
+
+                </select>
+
+
+                <button
+                    type="submit"
+                    class="tombol salin"
+                >
+                    📋 Salin Semua Soal
+                </button>
+
+
+                <a
+                    href="bank-soal.php"
+                    class="tombol kembali"
+                >
+                    ← Kembali ke Bank Soal
+                </a>
+
+            </form>
+
+        <?php endif; ?>
+
 
     </div>
 

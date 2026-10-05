@@ -1,22 +1,7 @@
 <?php
 
-session_start();
-
+require __DIR__ . "/includes/auth.php";
 require_once "../config/database.php";
-
-
-/*
-|--------------------------------------------------------------------------
-| CEK LOGIN ADMIN
-|--------------------------------------------------------------------------
-*/
-
-if (!isset($_SESSION["admin_id"])) {
-
-    header("Location: login.php");
-    exit;
-
-}
 
 
 /*
@@ -29,21 +14,15 @@ if (
     !isset($_GET["id"]) ||
     !is_numeric($_GET["id"])
 ) {
-
     header("Location: siswa.php");
     exit;
-
 }
-
 
 $id = (int) $_GET["id"];
 
-
 if ($id <= 0) {
-
     header("Location: siswa.php");
     exit;
-
 }
 
 
@@ -78,13 +57,9 @@ $stmt->execute();
 
 $result = $stmt->get_result();
 
-
 if ($result->num_rows === 0) {
-
     die("Data siswa tidak ditemukan.");
-
 }
-
 
 $siswa = $result->fetch_assoc();
 
@@ -117,7 +92,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $status === ""
     ) {
 
-        $error = "Username, nama, kelas, dan status wajib diisi.";
+        $error =
+            "Username, nama, kelas, dan status wajib diisi.";
 
     } else {
 
@@ -149,7 +125,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         if ($cek->num_rows > 0) {
 
-            $error = "Username sudah digunakan oleh siswa lain.";
+            $error =
+                "Username sudah digunakan oleh siswa lain.";
 
         } else {
 
@@ -182,7 +159,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     $status,
                     $id
                 );
-
 
             } else {
 
@@ -255,344 +231,391 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 }
 
+
+$page_title = "Edit Siswa";
+$page_description = "Mengubah data siswa";
+
+
+require __DIR__ . "/includes/header.php";
+require __DIR__ . "/includes/sidebar.php";
+
 ?>
 
+<main class="main">
 
-<!DOCTYPE html>
+    <header class="topbar">
 
-<html lang="id">
+        <div class="page-title">
 
-<head>
+            <h1>
+                Edit Siswa
+            </h1>
 
-<meta charset="UTF-8">
+            <p>
+                Mengubah data siswa
+            </p>
 
-<meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
->
+        </div>
 
-<title>
-Edit Siswa - PIRI CBT
-</title>
+
+        <div class="top-user">
+
+            <div class="top-user-icon">
+                👤
+            </div>
+
+            <span>
+                <?= htmlspecialchars($_SESSION["admin_nama"]) ?>
+            </span>
+
+        </div>
+
+    </header>
+
+
+    <header class="mobile-header">
+
+        <button
+            type="button"
+            class="menu-button"
+            onclick="bukaSidebar()"
+        >
+            ☰
+        </button>
+
+        <div class="mobile-title">
+            Edit Siswa
+        </div>
+
+        <div style="width:40px;"></div>
+
+    </header>
+
+
+    <section class="content">
+
+        <div class="form-card">
+
+            <div class="form-header">
+
+                <div>
+
+                    <h2>
+                        ✏️ Edit Siswa
+                    </h2>
+
+                    <p>
+                        Silakan ubah data siswa di bawah ini.
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <?php if ($error !== ""): ?>
+
+                <div class="error">
+
+                    <?= htmlspecialchars($error) ?>
+
+                </div>
+
+            <?php endif; ?>
+
+
+            <form
+                method="POST"
+                action=""
+            >
+
+
+                <div class="form-group">
+
+                    <label>
+                        Username
+                    </label>
+
+                    <input
+                        type="text"
+                        name="username"
+                        value="<?= htmlspecialchars(
+                            $siswa["username"]
+                        ) ?>"
+                        required
+                    >
+
+                </div>
+
+
+                <div class="form-group">
+
+                    <label>
+                        Nama Siswa
+                    </label>
+
+                    <input
+                        type="text"
+                        name="nama"
+                        value="<?= htmlspecialchars(
+                            $siswa["nama"]
+                        ) ?>"
+                        required
+                    >
+
+                </div>
+
+
+                <div class="form-group">
+
+                    <label>
+                        Kelas
+                    </label>
+
+                    <input
+                        type="text"
+                        name="kelas"
+                        value="<?= htmlspecialchars(
+                            $siswa["kelas"]
+                        ) ?>"
+                        required
+                    >
+
+                </div>
+
+
+                <div class="form-group">
+
+                    <label>
+                        Password
+                    </label>
+
+                    <input
+                        type="text"
+                        name="password"
+                        value=""
+                        placeholder="Kosongkan jika tidak ingin mengubah password"
+                    >
+
+                    <div class="info">
+                        Kosongkan password jika password siswa tidak ingin diubah.
+                    </div>
+
+                </div>
+
+
+                <div class="form-group">
+
+                    <label>
+                        Status
+                    </label>
+
+                    <select name="status">
+
+                        <option
+                            value="aktif"
+                            <?= $siswa["status"] === "aktif"
+                                ? "selected"
+                                : ""
+                            ?>
+                        >
+                            Aktif
+                        </option>
+
+                        <option
+                            value="nonaktif"
+                            <?= $siswa["status"] === "nonaktif"
+                                ? "selected"
+                                : ""
+                            ?>
+                        >
+                            Nonaktif
+                        </option>
+
+                    </select>
+
+                </div>
+
+
+                <div class="tombol-area">
+
+                    <button
+                        type="submit"
+                        class="simpan"
+                    >
+                        💾 Simpan Perubahan
+                    </button>
+
+
+                    <a
+                        href="siswa.php"
+                        class="kembali"
+                    >
+                        ← Kembali
+                    </a>
+
+                </div>
+
+
+            </form>
+
+        </div>
+
+    </section>
+
+</main>
 
 
 <style>
 
-body {
-
-    margin: 0;
-
-    font-family: Arial, sans-serif;
-
-    background: #f2f5f9;
-
-}
-
-
-.header {
-
-    background: white;
-
-    padding: 18px;
-
-    box-shadow:
-        0 2px 8px
-        rgba(0,0,0,.08);
-
-}
-
-
-.container {
-
-    max-width: 700px;
-
-    margin: auto;
-
-    padding: 20px;
-
-}
-
-
-.card {
-
-    background: white;
-
-    padding: 25px;
-
-    border-radius: 12px;
-
-    box-shadow:
-        0 3px 12px
-        rgba(0,0,0,.06);
-
-}
-
-
-label {
-
-    display: block;
-
-    margin-top: 15px;
-
-    margin-bottom: 6px;
-
-    font-weight: bold;
-
-}
-
-
-input,
-select {
-
+.form-card {
     width: 100%;
-
-    box-sizing: border-box;
-
-    padding: 11px;
-
-    border:
-        1px solid #ccc;
-
-    border-radius: 8px;
-
-    font-size: 15px;
-
+    max-width: 760px;
+    margin: 0 auto;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
 }
 
-
-.error {
-
-    padding: 12px;
-
-    margin-bottom: 15px;
-
-    background: #f8d7da;
-
-    color: #842029;
-
-    border-radius: 8px;
-
+.form-header {
+    padding-bottom: 20px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border);
 }
 
+.form-header h2 {
+    margin: 0;
+    font-size: 21px;
+    color: var(--text);
+}
+
+.form-header p {
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.form-group {
+    margin-bottom: 18px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 7px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #334155;
+}
+
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 12px 13px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: white;
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+    transition: .18s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, .10);
+}
 
 .info {
+    margin-top: 7px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
 
-    margin-top: 6px;
-
+.error {
+    margin-bottom: 20px;
+    padding: 12px 14px;
+    border-radius: 9px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
     font-size: 13px;
-
-    color: #777;
-
 }
 
-
-.tombol {
-
-    margin-top: 20px;
-
+.tombol-area {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
 }
 
+.simpan,
+.kembali {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    padding: 10px 16px;
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+}
 
 .simpan {
-
-    padding: 11px 18px;
-
     border: none;
-
-    border-radius: 8px;
-
-    background: #0d6efd;
-
+    background: var(--primary);
     color: white;
+}
 
-    cursor: pointer;
+.simpan:hover {
+    background: var(--primary-dark);
+}
 
-    font-size: 15px;
+.kembali {
+    background: #64748b;
+    color: white;
+}
 
+.kembali:hover {
+    background: #475569;
 }
 
 
-.kembali {
+@media (max-width: 600px) {
 
-    display: inline-block;
+    .form-card {
+        padding: 20px 16px;
+        border-radius: 12px;
+    }
 
-    margin-left: 8px;
+    .form-header h2 {
+        font-size: 18px;
+    }
 
-    padding: 10px 16px;
+    .tombol-area {
+        flex-direction: column;
+        align-items: stretch;
+    }
 
-    background: #6c757d;
-
-    color: white;
-
-    text-decoration: none;
-
-    border-radius: 8px;
+    .simpan,
+    .kembali {
+        width: 100%;
+    }
 
 }
 
 </style>
 
-</head>
 
+<?php
 
-<body>
+require __DIR__ . "/includes/footer.php";
 
-
-<div class="header">
-
-<strong>
-PIRI CBT — ADMIN
-</strong>
-
-</div>
-
-
-<div class="container">
-
-
-<div class="card">
-
-
-<h2>
-Edit Siswa
-</h2>
-
-
-<?php if ($error !== ""): ?>
-
-<div class="error">
-
-<?= htmlspecialchars($error) ?>
-
-</div>
-
-<?php endif; ?>
-
-
-<form
-    method="POST"
-    action=""
->
-
-
-<label>
-Username
-</label>
-
-<input
-    type="text"
-    name="username"
-    value="<?= htmlspecialchars(
-        $siswa["username"]
-    ) ?>"
-    required
->
-
-
-<label>
-Nama Siswa
-</label>
-
-<input
-    type="text"
-    name="nama"
-    value="<?= htmlspecialchars(
-        $siswa["nama"]
-    ) ?>"
-    required
->
-
-
-<label>
-Kelas
-</label>
-
-<input
-    type="text"
-    name="kelas"
-    value="<?= htmlspecialchars(
-        $siswa["kelas"]
-    ) ?>"
-    required
->
-
-
-<label>
-Password
-</label>
-
-<input
-    type="text"
-    name="password"
-    value=""
-    placeholder="Kosongkan jika tidak ingin mengubah password"
->
-
-<div class="info">
-
-Kosongkan password jika password siswa tidak ingin diubah.
-
-</div>
-
-
-<label>
-Status
-</label>
-
-<select name="status">
-
-<option
-    value="aktif"
-    <?= $siswa["status"] === "aktif"
-        ? "selected"
-        : ""
-    ?>
->
-Aktif
-</option>
-
-
-<option
-    value="nonaktif"
-    <?= $siswa["status"] === "nonaktif"
-        ? "selected"
-        : ""
-    ?>
->
-Nonaktif
-</option>
-
-</select>
-
-
-<div class="tombol">
-
-<button
-    type="submit"
-    class="simpan"
->
-Simpan Perubahan
-</button>
-
-
-<a
-    href="siswa.php"
-    class="kembali"
->
-Kembali
-</a>
-
-</div>
-
-
-</form>
-
-
-</div>
-
-</div>
-
-
-</body>
-
-</html>
+?>

@@ -18,6 +18,9 @@ if (!isset($_SESSION["admin_id"])) {
 
 }
 
+$admin_id = (int)($_SESSION["admin_id"] ?? 0);
+$admin_role = $_SESSION["admin_role"] ?? "admin";
+
 
 /*
 |--------------------------------------------------------------------------
@@ -107,44 +110,89 @@ try {
     );
 
 
-    $sql = "
-        SELECT
-            id,
-            sesi_id
-        FROM hasil_ujian
-        WHERE id IN ($placeholder)
+$sql = "
+    SELECT
+        h.id,
+        h.sesi_id
+    FROM hasil_ujian h
+    INNER JOIN ujian u
+        ON u.id = h.ujian_id
+";
+
+if ($admin_role !== "superadmin") {
+    $sql .= "
+        INNER JOIN admin_mapel am
+            ON am.mapel_id = u.mapel_id
+           AND am.admin_id = ?
     ";
+}
 
+$sql .= "
+    WHERE h.id IN ($placeholder)
+";
 
-    $stmt = $conn->prepare($sql);
+if ($admin_role !== "superadmin") {
 
+    $types = "i" . str_repeat("i", count($ids));
 
-    $stmt->bind_param(
-        $types,
-        ...$ids
+    $params = array_merge(
+        [$admin_id],
+        $ids
     );
 
+} else {
 
-    $stmt->execute();
+    $types = str_repeat("i", count($ids));
 
+    $params = $ids;
+}
 
-    $result = $stmt->get_result();
+$stmt = $conn->prepare($sql);
 
+$stmt->bind_param(
+    $types,
+    ...$params
+);
 
-    $sesi_ids = [];
+$stmt->execute();
 
+$result = $stmt->get_result();
 
-    while ($row = $result->fetch_assoc()) {
+$sesi_ids = [];
 
-        $sesi_id = (int) $row["sesi_id"];
+$authorized_ids = [];
 
-        if ($sesi_id > 0) {
+while ($row = $result->fetch_assoc()) {
 
-            $sesi_ids[] = $sesi_id;
+    $authorized_ids[] = (int) $row["id"];
 
-        }
+    $sesi_id = (int) $row["sesi_id"];
 
+    if ($sesi_id > 0) {
+        $sesi_ids[] = $sesi_id;
     }
+}
+
+if ($admin_role !== "superadmin") {
+
+    $ids = $authorized_ids;
+
+    if (empty($ids)) {
+        throw new Exception(
+            "Tidak ada hasil ujian yang dapat direset."
+        );
+    }
+
+    $placeholder = implode(
+        ",",
+        array_fill(0, count($ids), "?")
+    );
+
+    $types = str_repeat(
+        "i",
+        count($ids)
+    );
+}
 
 
     /*

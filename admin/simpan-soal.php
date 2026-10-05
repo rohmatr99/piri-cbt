@@ -9,6 +9,9 @@ if (!isset($_SESSION["admin_id"])) {
     exit;
 }
 
+$admin_id = (int)($_SESSION["admin_id"] ?? 0);
+$admin_role = $_SESSION["admin_role"] ?? "admin";
+
 
 $ujian_id = (int)($_POST["ujian_id"] ?? 0);
 $nomor = (int)($_POST["nomor"] ?? 0);
@@ -35,6 +38,25 @@ if (
     !in_array($kunci, ["A", "B", "C", "D"])
 ) {
     die("Data soal belum lengkap.");
+}
+
+/* Pastikan ujian boleh dikelola admin */
+if ($admin_role !== "superadmin") {
+    $stmtAkses = $conn->prepare("
+        SELECT u.id
+        FROM ujian u
+        INNER JOIN admin_mapel am
+            ON am.mapel_id = u.mapel_id
+           AND am.admin_id = ?
+        WHERE u.id = ?
+        LIMIT 1
+    ");
+    $stmtAkses->bind_param("ii", $admin_id, $ujian_id);
+    $stmtAkses->execute();
+
+    if (!$stmtAkses->get_result()->fetch_assoc()) {
+        die("Anda tidak memiliki akses ke ujian tersebut.");
+    }
 }
 
 

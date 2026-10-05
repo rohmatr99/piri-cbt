@@ -9,13 +9,17 @@ if (!isset($_SESSION["siswa_id"])) {
     exit;
 }
 
-$siswa_id = $_SESSION["siswa_id"];
+$siswa_id = (int) $_SESSION["siswa_id"];
 $kelas = $_SESSION["kelas"];
 
 /*
 |--------------------------------------------------------------------------
 | Ambil ujian yang sesuai dengan kelas siswa
 |--------------------------------------------------------------------------
+|
+| Token sengaja tidak diambil di dashboard.
+| Token hanya divalidasi di token-ujian.php melalui POST.
+|
 */
 
 $stmt = $conn->prepare("
@@ -24,7 +28,6 @@ $stmt = $conn->prepare("
         u.nama_ujian,
         u.kelas,
         u.durasi,
-        u.token,
         u.tanggal_mulai,
         u.tanggal_selesai,
         m.nama AS nama_mapel
@@ -186,7 +189,7 @@ Halo, <?= htmlspecialchars($_SESSION["nama"]) ?>
 
             <a
                 class="mulai"
-                href="ujian.php?id=<?= $ujian["id"] ?>"
+                href="token-ujian.php?id=<?= (int) $ujian["id"] ?>"
             >
                 Mulai Ujian
             </a>

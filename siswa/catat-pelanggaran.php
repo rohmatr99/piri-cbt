@@ -33,10 +33,26 @@ $siswa_id = (int) $_SESSION["siswa_id"];
 |--------------------------------------------------------------------------
 */
 
+$raw_input = file_get_contents("php://input");
+
 $data = json_decode(
-    file_get_contents("php://input"),
+    $raw_input,
     true
 );
+
+/*
+|--------------------------------------------------------------------------
+| FALLBACK FORM DATA
+|--------------------------------------------------------------------------
+|
+| Tetap menerima application/x-www-form-urlencoded jika ada browser/
+| mekanisme pengiriman yang tidak mengirim JSON.
+|
+*/
+
+if (!is_array($data)) {
+    $data = $_POST;
+}
 
 
 if (!$data) {
@@ -85,7 +101,8 @@ if (
 $jenis_diizinkan = [
     "Pindah tab",
     "Halaman ditinggalkan",
-    "Browser diminimalkan"
+    "Browser diminimalkan",
+    "Keluar fullscreen"
 ];
 
 

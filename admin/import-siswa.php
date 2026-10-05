@@ -1,22 +1,7 @@
 <?php
 
-session_start();
-
+require __DIR__ . "/includes/auth.php";
 require_once "../config/database.php";
-
-
-/*
-|--------------------------------------------------------------------------
-| CEK LOGIN ADMIN
-|--------------------------------------------------------------------------
-*/
-
-if (!isset($_SESSION["admin_id"])) {
-
-    header("Location: login.php");
-    exit;
-
-}
 
 
 /*
@@ -689,10 +674,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 $hasil_cek =
                     $stmt_cek->get_result();
 
-
                 $sudah_ada =
                     $hasil_cek->num_rows > 0;
-
 
                 $stmt_cek->close();
 
@@ -874,802 +857,890 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 }
 
+
+/*
+|--------------------------------------------------------------------------
+| PAGE LAYOUT
+|--------------------------------------------------------------------------
+*/
+
+$page_title = "Import Siswa";
+
+$page_description = "Import data siswa melalui file CSV";
+
+require __DIR__ . "/includes/header.php";
+
+require __DIR__ . "/includes/sidebar.php";
+
 ?>
-
-
-<!DOCTYPE html>
-
-<html lang="id">
-
-<head>
-
-<meta charset="UTF-8">
-
-<meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
->
-
-<title>
-Import Siswa - PIRI CBT
-</title>
-
 
 <style>
 
-body {
+/* =========================================================
+   IMPORT SISWA
+========================================================= */
 
-    margin: 0;
-
-    font-family: Arial, sans-serif;
-
-    background: #f2f5f9;
-
+.import-wrapper {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
 }
 
-
-.header {
-
-    background: white;
-
-    padding: 18px;
-
-    box-shadow:
-        0 2px 8px
-        rgba(0,0,0,.08);
-
-}
-
-
-.container {
-
-    max-width: 1100px;
-
-    margin: auto;
-
-    padding: 20px;
-
-}
-
-
-.card {
-
-    background: white;
-
-    padding: 25px;
-
-    border-radius: 12px;
-
-    box-shadow:
-        0 3px 12px
-        rgba(0,0,0,.06);
-
+.import-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, .05);
     margin-bottom: 20px;
-
 }
 
-
-input[type="file"] {
-
-    width: 100%;
-
-    box-sizing: border-box;
-
-    padding: 12px;
-
-    border:
-        1px solid #ccc;
-
-    border-radius: 8px;
-
+.import-card h2,
+.import-card h3 {
+    margin-top: 0;
+    color: var(--text);
 }
 
-
-.btn {
-
-    display: inline-block;
-
-    padding: 11px 18px;
-
-    border: none;
-
-    border-radius: 8px;
-
-    cursor: pointer;
-
-    text-decoration: none;
-
-    font-size: 15px;
-
-    margin-top: 10px;
-
+.import-card h2 {
+    margin-bottom: 8px;
+    font-size: 21px;
 }
 
-
-.upload {
-
-    background: #0d6efd;
-
-    color: white;
-
+.import-card h3 {
+    font-size: 17px;
 }
 
-
-.import {
-
-    background: #198754;
-
-    color: white;
-
+.import-subtitle {
+    margin: 0 0 20px;
+    color: var(--muted);
+    font-size: 13px;
 }
 
-
-.kembali {
-
-    background: #6c757d;
-
-    color: white;
-
-}
-
-
-.error {
-
-    padding: 12px;
-
-    margin-bottom: 15px;
-
-    background: #f8d7da;
-
-    color: #842029;
-
-    border-radius: 8px;
-
-}
-
-
-.success {
-
-    padding: 12px;
-
-    margin-bottom: 15px;
-
-    background: #d1e7dd;
-
-    color: #0f5132;
-
-    border-radius: 8px;
-
-}
-
-
-.warning {
-
-    padding: 12px;
-
-    margin-bottom: 15px;
-
-    background: #fff3cd;
-
-    color: #664d03;
-
-    border-radius: 8px;
-
-}
-
-
-.info {
-
-    background: #cff4fc;
-
-    color: #055160;
-
-    padding: 12px;
-
-    border-radius: 8px;
-
-    margin-bottom: 15px;
-
-    line-height: 1.6;
-
-}
-
-
-.ringkasan {
-
-    display: flex;
-
-    gap: 15px;
-
-    flex-wrap: wrap;
-
-    margin: 20px 0;
-
-}
-
-
-.box {
-
-    flex: 1;
-
-    min-width: 180px;
-
-    padding: 20px;
-
+.info-box,
+.error-box,
+.success-box,
+.warning-box {
+    padding: 14px 16px;
     border-radius: 10px;
-
-    background: #f1f3f5;
-
+    margin-bottom: 18px;
+    line-height: 1.6;
+    font-size: 13px;
 }
 
+.info-box {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1e40af;
+}
 
-.box strong {
+.error-box {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+}
 
+.success-box {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #166534;
+}
+
+.warning-box {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    color: #92400e;
+}
+
+.info-box code {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 5px 8px;
+    background: rgba(255,255,255,.8);
+    border-radius: 6px;
+    font-size: 12px;
+    word-break: break-word;
+}
+
+.upload-area {
+    border: 2px dashed #cbd5e1;
+    border-radius: 12px;
+    padding: 24px;
+    background: #f8fafc;
+}
+
+.upload-label {
     display: block;
-
-    font-size: 28px;
-
-    margin-top: 5px;
-
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: var(--text);
+    font-size: 14px;
 }
 
-
-.box.berhasil {
-
-    background: #d1e7dd;
-
-    color: #0f5132;
-
-}
-
-
-.box.gagal {
-
-    background: #f8d7da;
-
-    color: #842029;
-
-}
-
-
-table {
-
+.file-input {
     width: 100%;
+    padding: 12px;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    font-size: 13px;
+}
 
+.file-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, .10);
+}
+
+.button-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.btn-import,
+.btn-success,
+.btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 42px;
+    padding: 10px 16px;
+    border: 0;
+    border-radius: 9px;
+    text-decoration: none;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: .18s ease;
+}
+
+.btn-import {
+    background: var(--primary);
+    color: white;
+}
+
+.btn-import:hover {
+    background: var(--primary-dark);
+}
+
+.btn-success {
+    background: var(--success);
+    color: white;
+}
+
+.btn-success:hover {
+    background: #15803d;
+}
+
+.btn-secondary {
+    background: #64748b;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #475569;
+}
+
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin: 20px 0;
+}
+
+.summary-box {
+    padding: 18px;
+    border-radius: 12px;
+    background: #f8fafc;
+    border: 1px solid var(--border);
+}
+
+.summary-box.berhasil {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+    color: #166534;
+}
+
+.summary-box.gagal {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: #991b1b;
+}
+
+.summary-box span {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.summary-box strong {
+    display: block;
+    margin-top: 4px;
+    font-size: 28px;
+}
+
+.table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+}
+
+.import-table {
+    width: 100%;
+    min-width: 700px;
     border-collapse: collapse;
-
-    margin-top: 20px;
-
+    background: white;
 }
 
-
-th,
-td {
-
-    padding: 10px;
-
-    border-bottom:
-        1px solid #ddd;
-
+.import-table th,
+.import-table td {
+    padding: 11px 12px;
+    border-bottom: 1px solid var(--border);
     text-align: left;
-
+    vertical-align: top;
+    font-size: 12px;
 }
 
-
-th {
-
-    background: #f1f3f5;
-
+.import-table th {
+    background: #f8fafc;
+    color: #334155;
+    font-weight: 700;
+    white-space: nowrap;
 }
 
-
-.tabel-gagal th {
-
-    background: #f8d7da;
-
+.import-table tbody tr:last-child td {
+    border-bottom: 0;
 }
 
+.import-table tbody tr:hover {
+    background: #f8fafc;
+}
 
-@media (max-width: 700px) {
+.failed-table th {
+    background: #fef2f2;
+    color: #991b1b;
+}
 
-    .card {
+.preview-meta {
+    margin: 0 0 16px;
+    color: var(--muted);
+    font-size: 13px;
+}
 
-        overflow-x: auto;
+.preview-meta strong {
+    color: var(--text);
+}
 
+@media (max-width: 760px) {
+
+    .import-card {
+        padding: 18px;
+        border-radius: 12px;
     }
 
+    .summary-grid {
+        grid-template-columns: 1fr;
+    }
 
-    table {
+    .button-row {
+        flex-direction: column;
+    }
 
-        min-width: 750px;
+    .btn-import,
+    .btn-success,
+    .btn-secondary {
+        width: 100%;
+    }
 
+    .upload-area {
+        padding: 18px;
+    }
+
+}
+
+@media (max-width: 480px) {
+
+    .import-card {
+        padding: 15px;
+    }
+
+    .import-card h2 {
+        font-size: 19px;
+    }
+
+    .summary-box {
+        padding: 15px;
+    }
+
+    .summary-box strong {
+        font-size: 24px;
     }
 
 }
 
 </style>
 
-</head>
 
+<main class="main">
 
-<body>
+    <div class="topbar">
 
+        <div class="page-title">
 
-<div class="header">
+            <h1>
+                Import Siswa
+            </h1>
 
-<strong>
-PIRI CBT — ADMIN
-</strong>
+            <p>
+                Import data siswa melalui file CSV
+            </p>
 
-</div>
+        </div>
 
+        <div class="top-user">
 
-<div class="container">
+            <div class="top-user-icon">
+                👤
+            </div>
 
+            <span>
+                <?= htmlspecialchars($_SESSION["admin_nama"] ?? "Administrator") ?>
+            </span>
 
-<div class="card">
+        </div>
 
-<h2>
-Import Siswa
-</h2>
+    </div>
 
 
-<p>
+    <div class="mobile-header">
 
-Selamat datang,
-<strong>
-<?= htmlspecialchars(
-    $_SESSION["admin_nama"]
-) ?>
-</strong>
+        <button
+            type="button"
+            class="menu-button"
+            onclick="bukaSidebar()"
+            aria-label="Buka menu"
+        >
+            ☰
+        </button>
 
-</p>
+        <div class="mobile-title">
+            Import Siswa
+        </div>
 
+        <div style="width:40px;"></div>
 
-<div class="info">
+    </div>
 
-<strong>Format CSV:</strong>
 
-<br>
+    <section class="content">
 
-Kolom:
+        <div class="import-wrapper">
 
-<code>
-username,nama,kelas,password,status
-</code>
 
-<br><br>
+            <div class="import-card">
 
-CSV dari Excel dengan pemisah
-<strong>koma (,)</strong>
-atau
-<strong>titik koma (;)</strong>
-dapat digunakan.
+                <h2>
+                    Import Data Siswa
+                </h2>
 
-<br><br>
+                <p class="import-subtitle">
+                    Upload file CSV untuk menambahkan banyak siswa sekaligus.
+                </p>
 
-Contoh:
 
-<br>
+                <div class="info-box">
 
-<code>
-24001,Ahmad Fauzan,VIII A,123456,aktif
-</code>
+                    <strong>Format CSV:</strong>
 
-</div>
+                    <br>
 
+                    Kolom wajib:
 
-<?php if ($error !== ""): ?>
+                    <br>
 
-<div class="error">
+                    <code>
+                        username,nama,kelas,password,status
+                    </code>
 
-<?= htmlspecialchars($error) ?>
+                    <br><br>
 
-</div>
+                    CSV dari Excel dengan pemisah
+                    <strong>koma (,)</strong>
+                    atau
+                    <strong>titik koma (;)</strong>
+                    dapat digunakan.
 
-<?php endif; ?>
+                    <br><br>
 
+                    Contoh:
 
-<?php if ($pesan !== ""): ?>
+                    <br>
 
-<div class="success">
+                    <code>
+                        24001,Ahmad Fauzan,VIII A,123456,aktif
+                    </code>
 
-<?= htmlspecialchars($pesan) ?>
+                </div>
 
-</div>
 
-<?php endif; ?>
+                <?php if ($error !== ""): ?>
 
+                    <div class="error-box">
 
-<?php if ($total_data > 0): ?>
+                        <?= htmlspecialchars($error) ?>
 
-<div class="ringkasan">
+                    </div>
 
-<div class="box">
+                <?php endif; ?>
 
-Total Data
 
-<strong>
-<?= $total_data ?>
-</strong>
+                <?php if ($pesan !== ""): ?>
 
-</div>
+                    <div class="success-box">
 
+                        <?= htmlspecialchars($pesan) ?>
 
-<div class="box berhasil">
+                    </div>
 
-Berhasil
+                <?php endif; ?>
 
-<strong>
-<?= $jumlah_berhasil ?>
-</strong>
 
-</div>
+                <?php if ($total_data > 0): ?>
 
 
-<div class="box gagal">
+                    <div class="summary-grid">
 
-Gagal
+                        <div class="summary-box">
 
-<strong>
-<?= $jumlah_gagal ?>
-</strong>
+                            <span>
+                                Total Data
+                            </span>
 
-</div>
+                            <strong>
+                                <?= $total_data ?>
+                            </strong>
 
-</div>
+                        </div>
 
 
-<?php if ($jumlah_gagal > 0): ?>
+                        <div class="summary-box berhasil">
 
-<div class="warning">
+                            <span>
+                                Berhasil
+                            </span>
 
-<strong>
-Perhatian:
-</strong>
+                            <strong>
+                                <?= $jumlah_berhasil ?>
+                            </strong>
 
-Ada
-<?= $jumlah_gagal ?>
-data yang tidak berhasil diimport.
+                        </div>
 
-Silakan periksa tabel data gagal di bawah ini,
-perbaiki data tersebut di Excel,
-kemudian import ulang.
 
-</div>
+                        <div class="summary-box gagal">
 
+                            <span>
+                                Gagal
+                            </span>
 
-<div class="card">
+                            <strong>
+                                <?= $jumlah_gagal ?>
+                            </strong>
 
-<h3>
-Data yang Gagal Diimport
-</h3>
+                        </div>
 
+                    </div>
 
-<table class="tabel-gagal">
 
-<thead>
+                    <?php if ($jumlah_gagal > 0): ?>
 
-<tr>
+                        <div class="warning-box">
 
-<th>No Baris</th>
+                            <strong>
+                                Perhatian:
+                            </strong>
 
-<th>Username</th>
+                            Ada
+                            <?= $jumlah_gagal ?>
+                            data yang tidak berhasil diimport.
 
-<th>Nama</th>
+                            Silakan periksa tabel data gagal di bawah ini,
+                            perbaiki data tersebut di Excel,
+                            kemudian import ulang.
 
-<th>Kelas</th>
+                        </div>
 
-<th>Alasan</th>
 
-</tr>
+                        <div class="import-card">
 
-</thead>
+                            <h3>
+                                Data yang Gagal Diimport
+                            </h3>
 
 
-<tbody>
+                            <div class="table-wrapper">
 
+                                <table class="import-table failed-table">
 
-<?php foreach (
-    $hasil_import
-    as $gagal
-): ?>
+                                    <thead>
 
+                                        <tr>
 
-<tr>
+                                            <th>
+                                                No Baris
+                                            </th>
 
-<td>
-<?= htmlspecialchars(
-    $gagal["nomor"]
-) ?>
-</td>
+                                            <th>
+                                                Username
+                                            </th>
 
+                                            <th>
+                                                Nama
+                                            </th>
 
-<td>
-<?= htmlspecialchars(
-    $gagal["username"]
-) ?>
-</td>
+                                            <th>
+                                                Kelas
+                                            </th>
 
+                                            <th>
+                                                Alasan
+                                            </th>
 
-<td>
-<?= htmlspecialchars(
-    $gagal["nama"]
-) ?>
-</td>
+                                        </tr>
 
+                                    </thead>
 
-<td>
-<?= htmlspecialchars(
-    $gagal["kelas"]
-) ?>
-</td>
 
+                                    <tbody>
 
-<td>
-<?= htmlspecialchars(
-    $gagal["alasan"]
-) ?>
-</td>
+                                        <?php foreach (
+                                            $hasil_import
+                                            as $gagal
+                                        ): ?>
 
-</tr>
+                                            <tr>
 
+                                                <td>
+                                                    <?= htmlspecialchars(
+                                                        $gagal["nomor"]
+                                                    ) ?>
+                                                </td>
 
-<?php endforeach; ?>
+                                                <td>
+                                                    <?= htmlspecialchars(
+                                                        $gagal["username"]
+                                                    ) ?>
+                                                </td>
 
+                                                <td>
+                                                    <?= htmlspecialchars(
+                                                        $gagal["nama"]
+                                                    ) ?>
+                                                </td>
 
-</tbody>
+                                                <td>
+                                                    <?= htmlspecialchars(
+                                                        $gagal["kelas"]
+                                                    ) ?>
+                                                </td>
 
-</table>
+                                                <td>
+                                                    <?= htmlspecialchars(
+                                                        $gagal["alasan"]
+                                                    ) ?>
+                                                </td>
 
-</div>
+                                            </tr>
 
-<?php else: ?>
+                                        <?php endforeach; ?>
 
-<div class="success">
+                                    </tbody>
 
-<strong>
-Semua data berhasil diimport.
-</strong>
+                                </table>
 
-</div>
+                            </div>
 
-<?php endif; ?>
+                        </div>
 
+                    <?php else: ?>
 
-<a
-    href="siswa.php"
-    class="btn kembali"
->
-Kembali ke Data Siswa
-</a>
+                        <div class="success-box">
 
+                            <strong>
+                                Semua data berhasil diimport.
+                            </strong>
 
-<a
-    href="import-siswa.php"
-    class="btn upload"
->
-Import File Lain
-</a>
+                        </div>
 
+                    <?php endif; ?>
 
-<?php else: ?>
 
+                    <div class="button-row">
 
-<form
-    method="POST"
-    enctype="multipart/form-data"
->
+                        <a
+                            href="siswa.php"
+                            class="btn-secondary"
+                        >
+                            ← Kembali ke Data Siswa
+                        </a>
 
-<input
-    type="hidden"
-    name="aksi"
-    value="preview"
->
+                        <a
+                            href="import-siswa.php"
+                            class="btn-import"
+                        >
+                            ↻ Import File Lain
+                        </a>
 
+                    </div>
 
-<input
-    type="file"
-    name="file_csv"
-    accept=".csv"
-    required
->
 
+                <?php else: ?>
 
-<br>
 
+                    <div class="upload-area">
 
-<button
-    type="submit"
-    class="btn upload"
->
-Baca File CSV
-</button>
+                        <form
+                            method="POST"
+                            enctype="multipart/form-data"
+                        >
 
+                            <input
+                                type="hidden"
+                                name="aksi"
+                                value="preview"
+                            >
 
-<a
-    href="siswa.php"
-    class="btn kembali"
->
-Kembali
-</a>
 
+                            <label
+                                class="upload-label"
+                                for="file_csv"
+                            >
+                                Pilih File CSV
+                            </label>
 
-</form>
 
+                            <input
+                                type="file"
+                                id="file_csv"
+                                name="file_csv"
+                                class="file-input"
+                                accept=".csv"
+                                required
+                            >
 
-<?php endif; ?>
 
+                            <div class="button-row">
 
-</div>
+                                <button
+                                    type="submit"
+                                    class="btn-import"
+                                >
+                                    📄 Baca File CSV
+                                </button>
 
+                                <a
+                                    href="siswa.php"
+                                    class="btn-secondary"
+                                >
+                                    ← Kembali
+                                </a>
 
-<?php if (
-    count($preview) > 0 &&
-    $total_data === 0
-): ?>
+                            </div>
 
+                        </form>
 
-<div class="card">
+                    </div>
 
-<h3>
-Preview Data
-</h3>
 
+                <?php endif; ?>
 
-<p>
 
-File:
-<strong>
-<?= htmlspecialchars($nama_file) ?>
-</strong>
+            </div>
 
-</p>
 
+            <?php if (
+                count($preview) > 0 &&
+                $total_data === 0
+            ): ?>
 
-<p>
 
-Jumlah baris:
-<strong>
-<?= count($preview) ?>
-</strong>
+                <div class="import-card">
 
-</p>
+                    <h3>
+                        Preview Data
+                    </h3>
 
 
-<table>
+                    <p class="preview-meta">
 
-<thead>
+                        File:
 
-<tr>
+                        <strong>
+                            <?= htmlspecialchars($nama_file) ?>
+                        </strong>
 
-<th>No</th>
+                        <br>
 
-<th>Username</th>
+                        Jumlah baris:
 
-<th>Nama</th>
+                        <strong>
+                            <?= count($preview) ?>
+                        </strong>
 
-<th>Kelas</th>
+                    </p>
 
-<th>Password</th>
 
-<th>Status</th>
+                    <div class="table-wrapper">
 
-</tr>
+                        <table class="import-table">
 
-</thead>
+                            <thead>
 
+                                <tr>
 
-<tbody>
+                                    <th>
+                                        No
+                                    </th>
+
+                                    <th>
+                                        Username
+                                    </th>
+
+                                    <th>
+                                        Nama
+                                    </th>
+
+                                    <th>
+                                        Kelas
+                                    </th>
+
+                                    <th>
+                                        Password
+                                    </th>
+
+                                    <th>
+                                        Status
+                                    </th>
+
+                                </tr>
+
+                            </thead>
+
+
+                            <tbody>
+
+                                <?php
+
+                                $no = 1;
+
+                                foreach (
+                                    $preview
+                                    as $row
+                                ):
+
+                                ?>
+
+                                    <tr>
+
+                                        <td>
+                                            <?= $no++ ?>
+                                        </td>
+
+                                        <td>
+                                            <?= htmlspecialchars(
+                                                $row["username"]
+                                            ) ?>
+                                        </td>
+
+                                        <td>
+                                            <?= htmlspecialchars(
+                                                $row["nama"]
+                                            ) ?>
+                                        </td>
+
+                                        <td>
+                                            <?= htmlspecialchars(
+                                                $row["kelas"]
+                                            ) ?>
+                                        </td>
+
+                                        <td>
+                                            <?= htmlspecialchars(
+                                                $row["password"]
+                                            ) ?>
+                                        </td>
+
+                                        <td>
+                                            <?= htmlspecialchars(
+                                                $row["status"]
+                                            ) ?>
+                                        </td>
+
+                                    </tr>
+
+                                <?php endforeach; ?>
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+
+                    <form
+                        method="POST"
+                        onsubmit="
+                            return confirm(
+                                'Yakin ingin mengimport data siswa ke database?'
+                            );
+                        "
+                    >
+
+                        <input
+                            type="hidden"
+                            name="aksi"
+                            value="import"
+                        >
+
+
+                        <div class="button-row">
+
+                            <button
+                                type="submit"
+                                class="btn-success"
+                            >
+                                ✓ Import Data ke Database
+                            </button>
+
+                            <a
+                                href="siswa.php"
+                                class="btn-secondary"
+                            >
+                                Batal
+                            </a>
+
+                        </div>
+
+                    </form>
+
+
+                </div>
+
+
+            <?php endif; ?>
+
+
+        </div>
+
+    </section>
+
+</main>
 
 
 <?php
 
-$no = 1;
-
-foreach (
-    $preview
-    as $row
-):
+require __DIR__ . "/includes/footer.php";
 
 ?>
-
-
-<tr>
-
-<td>
-<?= $no++ ?>
-</td>
-
-
-<td>
-<?= htmlspecialchars(
-    $row["username"]
-) ?>
-</td>
-
-
-<td>
-<?= htmlspecialchars(
-    $row["nama"]
-) ?>
-</td>
-
-
-<td>
-<?= htmlspecialchars(
-    $row["kelas"]
-) ?>
-</td>
-
-
-<td>
-<?= htmlspecialchars(
-    $row["password"]
-) ?>
-</td>
-
-
-<td>
-<?= htmlspecialchars(
-    $row["status"]
-) ?>
-</td>
-
-</tr>
-
-
-<?php endforeach; ?>
-
-
-</tbody>
-
-</table>
-
-
-<form
-    method="POST"
-    onsubmit="
-        return confirm(
-            'Yakin ingin mengimport data siswa ke database?'
-        );
-    "
->
-
-<input
-    type="hidden"
-    name="aksi"
-    value="import"
->
-
-
-<button
-    type="submit"
-    class="btn import"
->
-Import Data ke Database
-</button>
-
-
-<a
-    href="siswa.php"
-    class="btn kembali"
->
-Batal
-</a>
-
-
-</form>
-
-
-</div>
-
-
-<?php endif; ?>
-
-
-</div>
-
-</body>
-
-</html>

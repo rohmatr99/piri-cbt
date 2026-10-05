@@ -1,8 +1,11 @@
 <?php
 
-session_start();
 
-require_once "../config/database.php";
+require __DIR__ . "/includes/auth.php";
+require __DIR__ . "/../config/database.php";
+
+$admin_id = (int) ($_SESSION["admin_id"] ?? 0);
+$admin_role = $_SESSION["admin_role"] ?? "admin";
 
 if (!isset($_SESSION["admin_id"])) {
     header("Location: login.php");
@@ -31,14 +34,17 @@ $filter_kelas = isset($_GET["kelas"])
    DATA UNTUK FILTER UJIAN
 ========================= */
 
-$resultUjian = $conn->query("
-    SELECT
-        id,
-        nama_ujian,
-        kelas
+$sqlUjian = "
+    SELECT id, nama_ujian, kelas
     FROM ujian
-    ORDER BY nama_ujian ASC
-");
+";
+if ($admin_role !== "superadmin") {
+    $sqlUjian .= " WHERE mapel_id IN (
+        SELECT mapel_id FROM admin_mapel WHERE admin_id = {$admin_id}
+    )";
+}
+$sqlUjian .= " ORDER BY nama_ujian ASC";
+$resultUjian = $conn->query($sqlUjian);
 
 if (!$resultUjian) {
     die("Gagal mengambil data ujian: " . $conn->error);
@@ -49,13 +55,17 @@ if (!$resultUjian) {
    DATA UNTUK FILTER MAPEL
 ========================= */
 
-$resultMapel = $conn->query("
-    SELECT
-        id,
-        nama
+$sqlMapel = "
+    SELECT id, nama
     FROM mata_pelajaran
-    ORDER BY nama ASC
-");
+";
+if ($admin_role !== "superadmin") {
+    $sqlMapel .= " WHERE id IN (
+        SELECT mapel_id FROM admin_mapel WHERE admin_id = {$admin_id}
+    )";
+}
+$sqlMapel .= " ORDER BY nama ASC";
+$resultMapel = $conn->query($sqlMapel);
 
 if (!$resultMapel) {
     die("Gagal mengambil data mata pelajaran: " . $conn->error);
@@ -66,13 +76,19 @@ if (!$resultMapel) {
    DATA KELAS
 ========================= */
 
-$resultKelas = $conn->query("
+$sqlKelas = "
     SELECT DISTINCT kelas
     FROM ujian
     WHERE kelas IS NOT NULL
-    AND kelas <> ''
-    ORDER BY kelas ASC
-");
+      AND kelas <> ''
+";
+if ($admin_role !== "superadmin") {
+    $sqlKelas .= " AND mapel_id IN (
+        SELECT mapel_id FROM admin_mapel WHERE admin_id = {$admin_id}
+    )";
+}
+$sqlKelas .= " ORDER BY kelas ASC";
+$resultKelas = $conn->query($sqlKelas);
 
 if (!$resultKelas) {
     die("Gagal mengambil data kelas: " . $conn->error);
@@ -95,16 +111,16 @@ $sql = "
         u.kelas,
         m.nama AS nama_mapel
     FROM soal s
-
-    LEFT JOIN ujian u
-        ON s.ujian_id = u.id
-
-    LEFT JOIN mata_pelajaran m
-        ON u.mapel_id = m.id
-
+    LEFT JOIN ujian u ON s.ujian_id = u.id
+    LEFT JOIN mata_pelajaran m ON u.mapel_id = m.id
     WHERE 1=1
 ";
 
+if ($admin_role !== "superadmin") {
+    $sql .= " AND u.mapel_id IN (
+        SELECT mapel_id FROM admin_mapel WHERE admin_id = {$admin_id}
+    )";
+}
 
 /* =========================
    FILTER UJIAN
@@ -163,23 +179,18 @@ if (!$result) {
     die("Query gagal: " . $conn->error);
 }
 
+
 ?>
 
-<!DOCTYPE html>
-<html lang="id">
-
-<head>
-
-<meta charset="UTF-8">
-
-<meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
->
-
-<title>Bank Soal - PIRI CBT</title>
+<?php
+$page_title = "Bank Soal";
+$page_description = "Kelola dan salin soal untuk ujian";
+require __DIR__ . "/includes/header.php";
+require __DIR__ . "/includes/sidebar.php";
+?>
 
 <style>
+
 
 * {
     box-sizing: border-box;
@@ -362,11 +373,42 @@ th {
 
 }
 
+
+.bank-main {
+    margin-left: 260px;
+}
+.bank-content {
+    padding: 20px 24px 30px;
+}
+@media (max-width: 1100px) {
+    .bank-main { margin-left: 260px; }
+}
+@media (max-width: 760px) {
+    .bank-main { margin-left: 0; }
+    .bank-content { padding: 14px 10px 25px; }
+}
 </style>
 
-</head>
+<main class="main bank-main">
+    <header class="topbar">
+        <div class="page-title">
+            <h1><?= htmlspecialchars($page_title) ?></h1>
+            <p><?= htmlspecialchars($page_description) ?></p>
+        </div>
+        <div class="top-user">
+            <div class="top-user-icon">👤</div>
+            <span><?= htmlspecialchars($_SESSION["admin_nama"] ?? "Administrator") ?></span>
+        </div>
+    </header>
 
-<body>
+    <header class="mobile-header">
+        <button type="button" class="menu-button" onclick="bukaSidebar()">☰</button>
+        <div class="mobile-title">PIRI CBT — Admin</div>
+        <div style="width:40px;"></div>
+    </header>
+
+    <section class="content bank-content">
+
 
 
 <div class="header">
@@ -900,6 +942,8 @@ checkboxes.forEach(
 </script>
 
 
-</body>
 
-</html>
+    </section>
+</main>
+
+<?php require __DIR__ . "/includes/footer.php"; ?>

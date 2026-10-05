@@ -7,6 +7,9 @@ if (!isset($_SESSION["admin_id"])) {
     exit;
 }
 
+$admin_id = (int)($_SESSION["admin_id"] ?? 0);
+$admin_role = $_SESSION["admin_role"] ?? "admin";
+
 $id = isset($_GET["id"]) ? (int)$_GET["id"] : 0;
 $ujian_id = isset($_GET["ujian_id"]) ? (int)$_GET["ujian_id"] : 0;
 
@@ -28,6 +31,25 @@ $soal = $result->fetch_assoc();
 
 if (!$soal) {
     die("Soal tidak ditemukan.");
+}
+
+if ($admin_role !== "superadmin") {
+    $stmt = $conn->prepare("
+        SELECT s.id
+        FROM soal s
+        INNER JOIN ujian u ON u.id = s.ujian_id
+        INNER JOIN admin_mapel am
+            ON am.mapel_id = u.mapel_id
+           AND am.admin_id = ?
+        WHERE s.id = ? AND s.ujian_id = ?
+        LIMIT 1
+    ");
+    $stmt->bind_param("iii", $admin_id, $id, $ujian_id);
+    $stmt->execute();
+
+    if (!$stmt->get_result()->fetch_assoc()) {
+        die("Anda tidak memiliki akses ke soal tersebut.");
+    }
 }
 
 /* Ambil data ujian */

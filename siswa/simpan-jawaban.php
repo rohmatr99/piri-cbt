@@ -83,6 +83,28 @@ if (!$sesi) {
 
 /*
 |--------------------------------------------------------------------------
+| KUNCI PENGAWAS
+|--------------------------------------------------------------------------
+|
+| Status sesi tetap "mengerjakan" saat terkunci agar timer/auto-kirim
+| tetap berjalan. Tetapi jawaban TIDAK boleh disimpan sampai pengawas
+| membuka kunci.
+|--------------------------------------------------------------------------
+*/
+
+if ((int) ($sesi["terkunci_pengawas"] ?? 0) === 1) {
+
+    echo json_encode([
+        "status" => false,
+        "pesan" => "Ujian sedang terkunci. Masukkan Kode Pengawas terlebih dahulu."
+    ]);
+
+    exit;
+}
+
+
+/*
+|--------------------------------------------------------------------------
 | Periksa waktu ujian
 |--------------------------------------------------------------------------
 */

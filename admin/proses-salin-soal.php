@@ -4,10 +4,19 @@ session_start();
 
 require_once "../config/database.php";
 
+
+/* =========================
+   CEK LOGIN
+========================= */
+
 if (!isset($_SESSION["admin_id"])) {
     header("Location: login.php");
     exit;
 }
+
+
+$admin_id = (int)($_SESSION["admin_id"] ?? 0);
+$admin_role = $_SESSION["admin_role"] ?? "admin";
 
 
 /* =========================
@@ -31,40 +40,83 @@ $nomor = isset($_POST["nomor"])
    VALIDASI
 ========================= */
 
-if ($soal_id <= 0 || $ujian_tujuan_id <= 0 || $nomor <= 0) {
+if (
+    $soal_id <= 0 ||
+    $ujian_tujuan_id <= 0 ||
+    $nomor <= 0
+) {
     die("Data penyalinan tidak lengkap.");
 }
 
 
 /* =========================
    AMBIL SOAL ASAL
+   + CEK AKSES
 ========================= */
 
-$stmt = $conn->prepare("
-    SELECT
-        id,
-        ujian_id,
-        pertanyaan,
-        tipe,
-        bobot
-    FROM soal
-    WHERE id = ?
-");
+if ($admin_role === "superadmin") {
 
-$stmt->bind_param("i", $soal_id);
+    $stmt = $conn->prepare("
+        SELECT
+            s.id,
+            s.ujian_id,
+            s.pertanyaan,
+            s.tipe,
+            s.bobot
+        FROM soal s
+        INNER JOIN ujian u
+            ON u.id = s.ujian_id
+        WHERE s.id = ?
+        LIMIT 1
+    ");
+
+    $stmt->bind_param(
+        "i",
+        $soal_id
+    );
+
+} else {
+
+    $stmt = $conn->prepare("
+        SELECT
+            s.id,
+            s.ujian_id,
+            s.pertanyaan,
+            s.tipe,
+            s.bobot
+        FROM soal s
+        INNER JOIN ujian u
+            ON u.id = s.ujian_id
+        INNER JOIN admin_mapel am
+            ON am.mapel_id = u.mapel_id
+           AND am.admin_id = ?
+        WHERE s.id = ?
+        LIMIT 1
+    ");
+
+    $stmt->bind_param(
+        "ii",
+        $admin_id,
+        $soal_id
+    );
+}
+
 $stmt->execute();
 
 $result = $stmt->get_result();
 
 $soal = $result->fetch_assoc();
 
+$stmt->close();
+
+
 if (!$soal) {
-    die("Soal asal tidak ditemukan.");
+    die("Soal asal tidak ditemukan atau Anda tidak memiliki akses.");
 }
 
 
 /* =========================
-   CEGAH SALIN KE UJIAN YANG SAMA
+   CEGAH SALIN KE UJIAN SAMA
 ========================= */
 
 if ((int)$soal["ujian_id"] === $ujian_tujuan_id) {
@@ -74,23 +126,61 @@ if ((int)$soal["ujian_id"] === $ujian_tujuan_id) {
 
 /* =========================
    CEK UJIAN TUJUAN
+   + CEK AKSES GURU
 ========================= */
 
-$stmt = $conn->prepare("
-    SELECT id, nama_ujian, kelas
-    FROM ujian
-    WHERE id = ?
-");
+if ($admin_role === "superadmin") {
 
-$stmt->bind_param("i", $ujian_tujuan_id);
+    $stmt = $conn->prepare("
+        SELECT
+            id,
+            nama_ujian,
+            kelas,
+            mapel_id
+        FROM ujian
+        WHERE id = ?
+        LIMIT 1
+    ");
+
+    $stmt->bind_param(
+        "i",
+        $ujian_tujuan_id
+    );
+
+} else {
+
+    $stmt = $conn->prepare("
+        SELECT
+            u.id,
+            u.nama_ujian,
+            u.kelas,
+            u.mapel_id
+        FROM ujian u
+        INNER JOIN admin_mapel am
+            ON am.mapel_id = u.mapel_id
+           AND am.admin_id = ?
+        WHERE u.id = ?
+        LIMIT 1
+    ");
+
+    $stmt->bind_param(
+        "ii",
+        $admin_id,
+        $ujian_tujuan_id
+    );
+}
+
 $stmt->execute();
 
 $result = $stmt->get_result();
 
 $ujianTujuan = $result->fetch_assoc();
 
+$stmt->close();
+
+
 if (!$ujianTujuan) {
-    die("Ujian tujuan tidak ditemukan.");
+    die("Ujian tujuan tidak ditemukan atau Anda tidak memiliki akses.");
 }
 
 
@@ -99,10 +189,12 @@ if (!$ujianTujuan) {
 ========================= */
 
 $stmt = $conn->prepare("
-    SELECT id, nomor
+    SELECT
+        id,
+        nomor
     FROM soal
     WHERE ujian_id = ?
-    AND pertanyaan = ?
+      AND pertanyaan = ?
     LIMIT 1
 ");
 
@@ -117,6 +209,9 @@ $stmt->execute();
 $result = $stmt->get_result();
 
 $soalDuplikat = $result->fetch_assoc();
+
+$stmt->close();
+
 
 if ($soalDuplikat) {
 
@@ -176,7 +271,7 @@ $stmt = $conn->prepare("
     SELECT id
     FROM soal
     WHERE ujian_id = ?
-    AND nomor = ?
+      AND nomor = ?
     LIMIT 1
 ");
 
@@ -190,7 +285,13 @@ $stmt->execute();
 
 $result = $stmt->get_result();
 
-if ($result->num_rows > 0) {
+$nomorSudahAda = $result->num_rows > 0;
+
+$stmt->close();
+
+
+if ($nomorSudahAda) {
+
     die("
         <div style='
             font-family: Arial, sans-serif;
@@ -233,7 +334,6 @@ if ($result->num_rows > 0) {
 
         </div>
     ");
-
 }
 
 
@@ -251,7 +351,11 @@ $stmt = $conn->prepare("
     ORDER BY kode ASC
 ");
 
-$stmt->bind_param("i", $soal_id);
+$stmt->bind_param(
+    "i",
+    $soal_id
+);
+
 $stmt->execute();
 
 $resultOpsi = $stmt->get_result();
@@ -261,6 +365,9 @@ $opsi = [];
 while ($row = $resultOpsi->fetch_assoc()) {
     $opsi[] = $row;
 }
+
+$stmt->close();
+
 
 if (count($opsi) === 0) {
     die("Pilihan jawaban soal tidak ditemukan.");
@@ -272,6 +379,7 @@ if (count($opsi) === 0) {
 ========================= */
 
 $conn->begin_transaction();
+
 
 try {
 
@@ -304,6 +412,8 @@ try {
 
     $soalBaruId = $conn->insert_id;
 
+    $stmtSoal->close();
+
 
     /* =========================
        INSERT PILIHAN JAWABAN
@@ -315,3 +425,212 @@ try {
             soal_id,
             kode,
             teks,
+            benar
+        )
+        VALUES (?, ?, ?, ?)
+    ");
+
+    foreach ($opsi as $op) {
+
+        $kode = $op["kode"];
+        $teks = $op["teks"];
+        $benar = (int)$op["benar"];
+
+        $stmtOpsi->bind_param(
+            "issi",
+            $soalBaruId,
+            $kode,
+            $teks,
+            $benar
+        );
+
+        $stmtOpsi->execute();
+    }
+
+    $stmtOpsi->close();
+
+
+    /* =========================
+       SIMPAN TRANSAKSI
+    ========================= */
+
+    $conn->commit();
+
+
+    /* =========================
+       BERHASIL
+    ========================= */
+
+    ?>
+
+    <!DOCTYPE html>
+    <html lang="id">
+
+    <head>
+
+        <meta charset="UTF-8">
+
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0"
+        >
+
+        <title>Salin Soal Berhasil</title>
+
+        <style>
+
+            body {
+                margin: 0;
+                font-family: Arial, sans-serif;
+                background: #f3f4f6;
+                color: #111827;
+            }
+
+            .box {
+                max-width: 600px;
+                margin: 60px auto;
+                background: white;
+                padding: 30px;
+                border-radius: 12px;
+                box-shadow: 0 2px 10px rgba(0,0,0,.08);
+                text-align: center;
+            }
+
+            .icon {
+                font-size: 55px;
+                margin-bottom: 10px;
+            }
+
+            h2 {
+                color: #16a34a;
+                margin-bottom: 15px;
+            }
+
+            p {
+                line-height: 1.7;
+            }
+
+            .tombol {
+                display: inline-block;
+                padding: 11px 18px;
+                margin: 8px 4px 0;
+                border-radius: 8px;
+                text-decoration: none;
+                color: white;
+                background: #2563eb;
+            }
+
+            .kembali {
+                background: #6b7280;
+            }
+
+        </style>
+
+    </head>
+
+    <body>
+
+        <div class="box">
+
+            <div class="icon">
+                ✅
+            </div>
+
+            <h2>
+                Soal Berhasil Disalin
+            </h2>
+
+            <p>
+                Soal berhasil disalin ke:
+            </p>
+
+            <p>
+                <strong>
+                    <?= htmlspecialchars(
+                        $ujianTujuan["nama_ujian"]
+                    ) ?>
+                </strong>
+            </p>
+
+            <p>
+                Nomor soal:
+                <strong>
+                    <?= $nomor ?>
+                </strong>
+            </p>
+
+            <a
+                href="soal.php?ujian_id=<?= $ujian_tujuan_id ?>"
+                class="tombol"
+            >
+                📝 Lihat Soal
+            </a>
+
+            <a
+                href="bank-soal.php"
+                class="tombol kembali"
+            >
+                ← Bank Soal
+            </a>
+
+        </div>
+
+    </body>
+
+    </html>
+
+    <?php
+
+
+} catch (Throwable $e) {
+
+    /* =========================
+       BATALKAN TRANSAKSI
+    ========================= */
+
+    $conn->rollback();
+
+    die("
+        <div style='
+            font-family: Arial, sans-serif;
+            max-width: 700px;
+            margin: 50px auto;
+            padding: 25px;
+            border: 1px solid #fecaca;
+            border-radius: 10px;
+            background: #fff;
+        '>
+
+            <h2 style='color: #dc2626;'>
+                Gagal Menyalin Soal
+            </h2>
+
+            <p>
+                Terjadi kesalahan saat menyalin soal.
+            </p>
+
+            <p>
+                <strong>Detail:</strong>
+                " . htmlspecialchars($e->getMessage()) . "
+            </p>
+
+            <br>
+
+            <a
+                href='salin-soal.php?id=$soal_id'
+                style='
+                    display: inline-block;
+                    padding: 10px 16px;
+                    background: #2563eb;
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 6px;
+                '
+            >
+                ← Kembali
+            </a>
+
+        </div>
+    ");
+}
+?>

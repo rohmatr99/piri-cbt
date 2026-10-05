@@ -18,6 +18,9 @@ if (!isset($_SESSION["admin_id"])) {
 
 }
 
+$admin_id = (int)($_SESSION["admin_id"] ?? 0);
+$admin_role = $_SESSION["admin_role"] ?? "admin";
+
 
 /*
 |--------------------------------------------------------------------------
@@ -53,21 +56,27 @@ if ($hasil_id <= 0) {
 |--------------------------------------------------------------------------
 */
 
-$stmt = $conn->prepare("
-    SELECT
-        id,
-        siswa_id,
-        ujian_id,
-        sesi_id
-    FROM hasil_ujian
-    WHERE id = ?
-    LIMIT 1
-");
-
-$stmt->bind_param(
-    "i",
-    $hasil_id
-);
+if ($admin_role === "superadmin") {
+    $stmt = $conn->prepare("
+        SELECT id, siswa_id, ujian_id, sesi_id
+        FROM hasil_ujian
+        WHERE id = ?
+        LIMIT 1
+    ");
+    $stmt->bind_param("i", $hasil_id);
+} else {
+    $stmt = $conn->prepare("
+        SELECT h.id, h.siswa_id, h.ujian_id, h.sesi_id
+        FROM hasil_ujian h
+        INNER JOIN ujian u ON u.id = h.ujian_id
+        INNER JOIN admin_mapel am
+            ON am.mapel_id = u.mapel_id
+           AND am.admin_id = ?
+        WHERE h.id = ?
+        LIMIT 1
+    ");
+    $stmt->bind_param("ii", $admin_id, $hasil_id);
+}
 
 $stmt->execute();
 

@@ -7,54 +7,71 @@ if (!isset($_SESSION["admin_id"])) {
     exit;
 }
 
-$id = isset($_GET["id"]) ? (int)$_GET["id"] : 0;
+$admin_id = (int)($_SESSION["admin_id"] ?? 0);
+$admin_role = $_SESSION["admin_role"] ?? "admin";
 
+$id = isset($_GET["id"]) ? (int)$_GET["id"] : 0;
 if ($id <= 0) {
     die("ID ujian tidak valid.");
 }
 
-/* Ambil data ujian */
-$stmt = $conn->prepare("
-    SELECT
-        id,
-        nama_ujian,
-        mapel_id,
-        kelas,
-        durasi,
-        minimal_menit,
-        maks_pelanggaran,
-        token,
-        tanggal_mulai,
-        tanggal_selesai,
-        status
-    FROM ujian
-    WHERE id = ?
-    LIMIT 1
-");
-
-$stmt->bind_param("i", $id);
+/* Ambil ujian sekaligus cek hak akses mapel. */
+if ($admin_role === "superadmin") {
+    $stmt = $conn->prepare("
+        SELECT id, nama_ujian, mapel_id, kelas, durasi, minimal_menit,
+               maks_pelanggaran, token, tanggal_mulai, tanggal_selesai, status
+        FROM ujian
+        WHERE id = ?
+        LIMIT 1
+    ");
+    $stmt->bind_param("i", $id);
+} else {
+    $stmt = $conn->prepare("
+        SELECT u.id, u.nama_ujian, u.mapel_id, u.kelas, u.durasi,
+               u.minimal_menit, u.maks_pelanggaran, u.token,
+               u.tanggal_mulai, u.tanggal_selesai, u.status
+        FROM ujian u
+        INNER JOIN admin_mapel am
+            ON am.mapel_id = u.mapel_id
+           AND am.admin_id = ?
+        WHERE u.id = ?
+        LIMIT 1
+    ");
+    $stmt->bind_param("ii", $admin_id, $id);
+}
 $stmt->execute();
-
-$result = $stmt->get_result();
-$ujian = $result->fetch_assoc();
+$ujian = $stmt->get_result()->fetch_assoc();
 
 if (!$ujian) {
-    die("Data ujian tidak ditemukan.");
+    http_response_code(403);
+    die("Akses ditolak. Ujian ini bukan mata pelajaran yang ditugaskan kepada Anda.");
 }
 
-/* Ambil daftar mata pelajaran */
-$mapel = $conn->query("
-    SELECT
-        id,
-        nama,
-        kode
-    FROM mata_pelajaran
-    WHERE status = 'aktif'
-    ORDER BY nama ASC
-");
+/* Admin biasa hanya boleh memilih mapel yang memang ditugaskan. */
+if ($admin_role === "superadmin") {
+    $mapel = $conn->query("
+        SELECT id, nama, kode
+        FROM mata_pelajaran
+        WHERE status = 'aktif'
+        ORDER BY nama ASC
+    ");
+} else {
+    $stmtMapel = $conn->prepare("
+        SELECT m.id, m.nama, m.kode
+        FROM mata_pelajaran m
+        INNER JOIN admin_mapel am
+            ON am.mapel_id = m.id
+           AND am.admin_id = ?
+        WHERE m.status = 'aktif'
+        ORDER BY m.nama ASC
+    ");
+    $stmtMapel->bind_param("i", $admin_id);
+    $stmtMapel->execute();
+    $mapel = $stmtMapel->get_result();
+}
 
 if (!$mapel) {
-    die("Gagal mengambil data mata pelajaran: " . $conn->error);
+    die("Gagal mengambil data mata pelajaran.");
 }
 ?>
 

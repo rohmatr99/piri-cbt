@@ -9,6 +9,9 @@ if (!isset($_SESSION["admin_id"])) {
     exit;
 }
 
+$admin_id = (int)($_SESSION["admin_id"] ?? 0);
+$admin_role = $_SESSION["admin_role"] ?? "admin";
+
 
 /* =========================
    AMBIL DATA FORM
@@ -55,22 +58,56 @@ if ($ujian_tujuan_id <= 0) {
 
 /* =========================
    CEK UJIAN TUJUAN
+   DAN AMBIL MAPEL TUJUAN
 ========================= */
 
-$stmt = $conn->prepare("
-    SELECT
-        id,
-        nama_ujian,
-        kelas
-    FROM ujian
-    WHERE id = ?
-    LIMIT 1
-");
+if ($admin_role === "superadmin") {
 
-$stmt->bind_param(
-    "i",
-    $ujian_tujuan_id
-);
+    $stmt = $conn->prepare("
+        SELECT
+            u.id,
+            u.nama_ujian,
+            u.kelas,
+            u.mapel_id,
+            m.nama AS nama_mapel
+        FROM ujian u
+        LEFT JOIN mata_pelajaran m
+            ON m.id = u.mapel_id
+        WHERE u.id = ?
+        LIMIT 1
+    ");
+
+    $stmt->bind_param(
+        "i",
+        $ujian_tujuan_id
+    );
+
+} else {
+
+    $stmt = $conn->prepare("
+        SELECT
+            u.id,
+            u.nama_ujian,
+            u.kelas,
+            u.mapel_id,
+            m.nama AS nama_mapel
+        FROM ujian u
+        INNER JOIN admin_mapel am
+            ON am.mapel_id = u.mapel_id
+           AND am.admin_id = ?
+        LEFT JOIN mata_pelajaran m
+            ON m.id = u.mapel_id
+        WHERE u.id = ?
+        LIMIT 1
+    ");
+
+    $stmt->bind_param(
+        "ii",
+        $admin_id,
+        $ujian_tujuan_id
+    );
+}
+
 
 $stmt->execute();
 
@@ -78,9 +115,15 @@ $result = $stmt->get_result();
 
 $ujianTujuan = $result->fetch_assoc();
 
+$stmt->close();
+
+
 if (!$ujianTujuan) {
-    die("Ujian tujuan tidak ditemukan.");
+    die("Ujian tujuan tidak ditemukan atau Anda tidak memiliki akses.");
 }
+
+
+$mapel_tujuan_id = (int)$ujianTujuan["mapel_id"];
 
 
 /* =========================
@@ -115,21 +158,49 @@ try {
 
     $nomorBerikutnya = ((int)$rowNomor[0]) + 1;
 
+    $stmtNomor->close();
+
 
     /* =========================
        QUERY SOAL ASAL
+       SEKALIGUS CEK MAPEL
     ========================= */
 
-    $stmtSoal = $conn->prepare("
-        SELECT
-            id,
-            pertanyaan,
-            tipe,
-            bobot
-        FROM soal
-        WHERE id = ?
-        LIMIT 1
-    ");
+    if ($admin_role === "superadmin") {
+
+        $stmtSoal = $conn->prepare("
+            SELECT
+                s.id,
+                s.pertanyaan,
+                s.tipe,
+                s.bobot,
+                u.mapel_id
+            FROM soal s
+            INNER JOIN ujian u
+                ON u.id = s.ujian_id
+            WHERE s.id = ?
+            LIMIT 1
+        ");
+
+    } else {
+
+        $stmtSoal = $conn->prepare("
+            SELECT
+                s.id,
+                s.pertanyaan,
+                s.tipe,
+                s.bobot,
+                u.mapel_id
+            FROM soal s
+            INNER JOIN ujian u
+                ON u.id = s.ujian_id
+            INNER JOIN admin_mapel am
+                ON am.mapel_id = u.mapel_id
+               AND am.admin_id = ?
+            WHERE s.id = ?
+            LIMIT 1
+        ");
+    }
 
 
     /* =========================
@@ -214,10 +285,22 @@ try {
            AMBIL SOAL ASAL
         ========================= */
 
-        $stmtSoal->bind_param(
-            "i",
-            $soal_id
-        );
+        if ($admin_role === "superadmin") {
+
+            $stmtSoal->bind_param(
+                "i",
+                $soal_id
+            );
+
+        } else {
+
+            $stmtSoal->bind_param(
+                "ii",
+                $admin_id,
+                $soal_id
+            );
+        }
+
 
         $stmtSoal->execute();
 
@@ -228,7 +311,22 @@ try {
 
         if (!$soal) {
             throw new Exception(
-                "Soal dengan ID $soal_id tidak ditemukan."
+                "Soal dengan ID $soal_id tidak ditemukan atau Anda tidak memiliki akses."
+            );
+        }
+
+
+        /* =========================
+           CEK MAPEL ASAL
+        ========================= */
+
+        $mapel_asal_id = (int)$soal["mapel_id"];
+
+
+        if ($mapel_asal_id !== $mapel_tujuan_id) {
+
+            throw new Exception(
+                "Soal ID $soal_id berasal dari mata pelajaran yang berbeda dengan ujian tujuan."
             );
         }
 
@@ -251,11 +349,6 @@ try {
         $duplikat =
             $resultDuplikat->fetch_assoc();
 
-
-        /*
-        | Jika pertanyaan sudah ada,
-        | lewati soal ini.
-        */
 
         if ($duplikat) {
 

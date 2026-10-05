@@ -4,12 +4,24 @@ session_start();
 
 require_once "../config/database.php";
 
+
+/* =========================
+   CEK LOGIN
+========================= */
+
 if (!isset($_SESSION["admin_id"])) {
     header("Location: login.php");
     exit;
 }
 
-$soal_id = isset($_GET["id"]) ? (int)$_GET["id"] : 0;
+
+$admin_id = (int)($_SESSION["admin_id"] ?? 0);
+$admin_role = $_SESSION["admin_role"] ?? "admin";
+
+$soal_id = isset($_GET["id"])
+    ? (int)$_GET["id"]
+    : 0;
+
 
 if ($soal_id <= 0) {
     die("ID soal tidak valid.");
@@ -17,7 +29,7 @@ if ($soal_id <= 0) {
 
 
 /* =========================
-   AMBIL SOAL
+   AMBIL SOAL + MAPEL ASAL
 ========================= */
 
 $stmt = $conn->prepare("
@@ -29,20 +41,74 @@ $stmt = $conn->prepare("
         s.tipe,
         s.bobot,
         u.nama_ujian,
-        u.kelas
+        u.kelas,
+        u.mapel_id,
+        m.nama AS nama_mapel
     FROM soal s
-    LEFT JOIN ujian u ON s.ujian_id = u.id
+    INNER JOIN ujian u
+        ON u.id = s.ujian_id
+    LEFT JOIN mata_pelajaran m
+        ON m.id = u.mapel_id
     WHERE s.id = ?
+    LIMIT 1
 ");
 
-$stmt->bind_param("i", $soal_id);
+$stmt->bind_param(
+    "i",
+    $soal_id
+);
+
 $stmt->execute();
 
 $result = $stmt->get_result();
+
 $soal = $result->fetch_assoc();
+
+$stmt->close();
+
 
 if (!$soal) {
     die("Soal tidak ditemukan.");
+}
+
+
+$mapel_asal_id = (int)$soal["mapel_id"];
+
+
+/* =========================
+   CEK AKSES SOAL ASAL
+========================= */
+
+if ($admin_role !== "superadmin") {
+
+    $stmt = $conn->prepare("
+        SELECT s.id
+        FROM soal s
+        INNER JOIN ujian u
+            ON u.id = s.ujian_id
+        INNER JOIN admin_mapel am
+            ON am.mapel_id = u.mapel_id
+           AND am.admin_id = ?
+        WHERE s.id = ?
+        LIMIT 1
+    ");
+
+    $stmt->bind_param(
+        "ii",
+        $admin_id,
+        $soal_id
+    );
+
+    $stmt->execute();
+
+    $aksesSoal = $stmt->get_result()->fetch_assoc();
+
+    $stmt->close();
+
+
+    if (!$aksesSoal) {
+        die("Anda tidak memiliki akses ke soal tersebut.");
+    }
 }
 
 
@@ -51,13 +117,20 @@ if (!$soal) {
 ========================= */
 
 $stmt = $conn->prepare("
-    SELECT kode, teks, benar
+    SELECT
+        kode,
+        teks,
+        benar
     FROM opsi_soal
     WHERE soal_id = ?
     ORDER BY kode ASC
 ");
 
-$stmt->bind_param("i", $soal_id);
+$stmt->bind_param(
+    "i",
+    $soal_id
+);
+
 $stmt->execute();
 
 $resultOpsi = $stmt->get_result();
@@ -68,19 +141,59 @@ while ($row = $resultOpsi->fetch_assoc()) {
     $opsi[] = $row;
 }
 
+$stmt->close();
+
 
 /* =========================
    AMBIL UJIAN LAIN
+   HANYA MAPEL YANG SAMA
 ========================= */
 
-$stmt = $conn->prepare("
-    SELECT id, nama_ujian, kelas
-    FROM ujian
-    WHERE id <> ?
-    ORDER BY id DESC
-");
+if ($admin_role === "superadmin") {
 
-$stmt->bind_param("i", $soal["ujian_id"]);
+    $stmt = $conn->prepare("
+        SELECT
+            u.id,
+            u.nama_ujian,
+            u.kelas,
+            u.mapel_id
+        FROM ujian u
+        WHERE u.id <> ?
+          AND u.mapel_id = ?
+        ORDER BY u.id DESC
+    ");
+
+    $stmt->bind_param(
+        "ii",
+        $soal["ujian_id"],
+        $mapel_asal_id
+    );
+
+} else {
+
+    $stmt = $conn->prepare("
+        SELECT
+            u.id,
+            u.nama_ujian,
+            u.kelas,
+            u.mapel_id
+        FROM ujian u
+        INNER JOIN admin_mapel am
+            ON am.mapel_id = u.mapel_id
+           AND am.admin_id = ?
+        WHERE u.id <> ?
+          AND u.mapel_id = ?
+        ORDER BY u.id DESC
+    ");
+
+    $stmt->bind_param(
+        "iii",
+        $admin_id,
+        $soal["ujian_id"],
+        $mapel_asal_id
+    );
+}
+
 $stmt->execute();
 
 $ujianResult = $stmt->get_result();
@@ -90,6 +203,8 @@ $daftarUjian = [];
 while ($row = $ujianResult->fetch_assoc()) {
     $daftarUjian[] = $row;
 }
+
+$stmt->close();
 
 
 /* =========================
@@ -103,16 +218,25 @@ if (count($daftarUjian) > 0) {
     $ujianPertama = (int)$daftarUjian[0]["id"];
 
     $stmt = $conn->prepare("
-        SELECT COALESCE(MAX(nomor), 0) + 1 AS nomor_baru
+        SELECT
+            COALESCE(MAX(nomor), 0) + 1 AS nomor_baru
         FROM soal
         WHERE ujian_id = ?
     ");
 
-    $stmt->bind_param("i", $ujianPertama);
+    $stmt->bind_param(
+        "i",
+        $ujianPertama
+    );
+
     $stmt->execute();
 
     $resultNext = $stmt->get_result();
+
     $rowNext = $resultNext->fetch_assoc();
+
+    $stmt->close();
+
 
     if ($rowNext) {
         $nextNomor = (int)$rowNext["nomor_baru"];
@@ -128,8 +252,10 @@ if (count($daftarUjian) > 0) {
 
 <meta charset="UTF-8">
 
-<meta name="viewport"
-      content="width=device-width, initial-scale=1.0">
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
 
 <title>Salin Soal</title>
 
@@ -261,6 +387,7 @@ input[type="number"] {
     PIRI CBT — ADMIN
 </div>
 
+
 <div class="container">
 
 
@@ -276,13 +403,25 @@ input[type="number"] {
 
             <strong>Ujian asal:</strong><br>
 
-            <?= htmlspecialchars($soal["nama_ujian"] ?? "-") ?>
+            <?= htmlspecialchars(
+                $soal["nama_ujian"] ?? "-"
+            ) ?>
+
+            <br>
+
+            <strong>Mata Pelajaran:</strong>
+
+            <?= htmlspecialchars(
+                $soal["nama_mapel"] ?? "-"
+            ) ?>
 
             <br>
 
             <strong>Kelas:</strong>
 
-            <?= htmlspecialchars($soal["kelas"] ?? "-") ?>
+            <?= htmlspecialchars(
+                $soal["kelas"] ?? "-"
+            ) ?>
 
             <br>
 
@@ -340,17 +479,17 @@ input[type="number"] {
 
             <div class="warning">
 
-                <strong>Belum ada ujian lain.</strong>
+                <strong>
+                    Belum ada ujian lain pada mata pelajaran
+                    <?= htmlspecialchars(
+                        $soal["nama_mapel"] ?? "-"
+                    ) ?>.
+                </strong>
 
                 <br><br>
 
-                Soal ini berasal dari satu-satunya ujian
-                yang tersedia.
-
-                <br>
-
-                Silakan buat ujian baru terlebih dahulu
-                sebelum menyalin soal.
+                Soal hanya dapat disalin ke ujian
+                dengan mata pelajaran yang sama.
 
             </div>
 
@@ -377,8 +516,12 @@ input[type="number"] {
 
                 Ujian tujuan tersedia.
 
-                Silakan pilih ujian yang akan menerima
-                salinan soal.
+                <br>
+
+                <strong>
+                    Hanya ujian dengan mata pelajaran
+                    yang sama yang ditampilkan.
+                </strong>
 
             </div>
 

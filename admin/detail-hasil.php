@@ -18,6 +18,9 @@ if (!isset($_SESSION["admin_id"])) {
 
 }
 
+$admin_id = (int)($_SESSION["admin_id"] ?? 0);
+$admin_role = $_SESSION["admin_role"] ?? "admin";
+
 
 /*
 |--------------------------------------------------------------------------
@@ -50,46 +53,94 @@ if ($hasil_id <= 0) {
 |--------------------------------------------------------------------------
 */
 
-$stmt = $conn->prepare("
-    SELECT
-        h.id,
-        h.siswa_id,
-        h.ujian_id,
-        h.jumlah_soal,
-        h.jumlah_dijawab,
-        h.jumlah_benar,
-        h.jumlah_salah,
-        h.nilai,
+if ($admin_role === "superadmin") {
 
-        s.nama,
-        s.username,
-        s.kelas,
+    $stmt = $conn->prepare("
+        SELECT
+            h.id,
+            h.siswa_id,
+            h.ujian_id,
+            h.jumlah_soal,
+            h.jumlah_dijawab,
+            h.jumlah_benar,
+            h.jumlah_salah,
+            h.nilai,
 
-        u.nama_ujian,
+            s.nama,
+            s.username,
+            s.kelas,
 
-        m.nama AS mapel
+            u.nama_ujian,
+            m.nama AS mapel
 
-    FROM hasil_ujian h
+        FROM hasil_ujian h
 
-    LEFT JOIN siswa s
-        ON h.siswa_id = s.id
+        LEFT JOIN siswa s
+            ON h.siswa_id = s.id
 
-    LEFT JOIN ujian u
-        ON h.ujian_id = u.id
+        LEFT JOIN ujian u
+            ON h.ujian_id = u.id
 
-    LEFT JOIN mata_pelajaran m
-        ON u.mapel_id = m.id
+        LEFT JOIN mata_pelajaran m
+            ON u.mapel_id = m.id
 
-    WHERE h.id = ?
+        WHERE h.id = ?
+        LIMIT 1
+    ");
 
-    LIMIT 1
-");
+    $stmt->bind_param("i", $hasil_id);
 
+} else {
 
-$stmt->bind_param(
-    "i",
-    $hasil_id
-);
+    $stmt = $conn->prepare("
+        SELECT
+            h.id,
+            h.siswa_id,
+            h.ujian_id,
+            h.jumlah_soal,
+            h.jumlah_dijawab,
+            h.jumlah_benar,
+            h.jumlah_salah,
+            h.nilai,
+
+            s.nama,
+            s.username,
+            s.kelas,
+
+            u.nama_ujian,
+            m.nama AS mapel
+
+        FROM hasil_ujian h
+
+        LEFT JOIN siswa s
+            ON h.siswa_id = s.id
+
+        LEFT JOIN ujian u
+            ON h.ujian_id = u.id
+
+        LEFT JOIN mata_pelajaran m
+            ON u.mapel_id = m.id
+
+        INNER JOIN admin_mapel am
+            ON am.mapel_id = u.mapel_id
+           AND am.admin_id = ?
+
+        WHERE h.id = ?
+        LIMIT 1
+    ");
+
+    $stmt->bind_param("ii", $admin_id, $hasil_id);
+}
+
+$stmt->execute();
+
+$hasil = $stmt
+    ->get_result()
+    ->fetch_assoc();
+
+if (!$hasil) {
+    die("Data hasil ujian tidak ditemukan.");
+}
 
 
 $stmt->execute();
