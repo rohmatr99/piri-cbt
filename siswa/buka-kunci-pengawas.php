@@ -1,66 +1,13 @@
 <?php
-
-date_default_timezone_set("Asia/Jakarta");
-session_start();
-require_once "../config/database.php";
-header("Content-Type: application/json; charset=utf-8");
-
-if (!isset($_SESSION["siswa_id"])) {
-    echo json_encode(["status" => false, "pesan" => "Sesi login tidak ditemukan."]);
-    exit;
-}
-
-$siswa_id = (int) $_SESSION["siswa_id"];
-$sesi_id = isset($_POST["sesi_id"]) ? (int) $_POST["sesi_id"] : 0;
-$ujian_id = isset($_POST["ujian_id"]) ? (int) $_POST["ujian_id"] : 0;
-$kode = trim((string)($_POST["kode"] ?? ""));
-
-if ($sesi_id <= 0 || $ujian_id <= 0 || !preg_match('/^\d{6}$/', $kode)) {
-    echo json_encode(["status" => false, "pesan" => "Kode pengawas harus terdiri dari 6 digit."]);
-    exit;
-}
-
-$conn->begin_transaction();
-
-try {
-    $stmt = $conn->prepare("SELECT id, status, batas_waktu, terkunci_pengawas FROM sesi_ujian WHERE id = ? AND siswa_id = ? AND ujian_id = ? LIMIT 1 FOR UPDATE");
-    $stmt->bind_param("iii", $sesi_id, $siswa_id, $ujian_id);
-    $stmt->execute();
-    $sesi = $stmt->get_result()->fetch_assoc();
-
-    if (!$sesi) throw new Exception("Sesi ujian tidak valid.");
-    if ($sesi["status"] !== "mengerjakan") throw new Exception("Ujian sudah selesai.");
-    if (strtotime($sesi["batas_waktu"]) <= time()) throw new Exception("Waktu ujian telah habis.");
-    if ((int)$sesi["terkunci_pengawas"] !== 1) throw new Exception("Sesi tidak sedang terkunci.");
-
-    $stmt = $conn->prepare("SELECT id FROM kode_pengawas_ujian WHERE sesi_id = ? AND kode = ? AND status = 'aktif' ORDER BY id DESC LIMIT 1 FOR UPDATE");
-    $stmt->bind_param("is", $sesi_id, $kode);
-    $stmt->execute();
-    $kode_row = $stmt->get_result()->fetch_assoc();
-
-    if (!$kode_row) throw new Exception("Kode pengawas salah atau sudah tidak berlaku.");
-
-    $kode_id = (int)$kode_row["id"];
-
-    $stmt = $conn->prepare("UPDATE kode_pengawas_ujian SET status = 'digunakan', digunakan = NOW() WHERE id = ?");
-    $stmt->bind_param("i", $kode_id);
-    $stmt->execute();
-
-    $stmt = $conn->prepare("UPDATE sesi_ujian SET terkunci_pengawas = 0 WHERE id = ?");
-    $stmt->bind_param("i", $sesi_id);
-    $stmt->execute();
-
-    $conn->commit();
-
-    echo json_encode([
-        "status" => true,
-        "terkunci_pengawas" => false,
-        "pesan" => "Kode pengawas benar."
-    ]);
-    exit;
-
-} catch (Throwable $e) {
-    $conn->rollback();
-    echo json_encode(["status" => false, "pesan" => $e->getMessage()]);
-    exit;
-}
+declare(strict_types=1); date_default_timezone_set("Asia/Jakarta"); session_start(); require_once "../config/database.php";
+header("Content-Type: application/json; charset=UTF-8"); header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+function jr(bool $ok,string $msg,array $x=[],int $c=200): never { http_response_code($c); echo json_encode(array_merge(["status"=>$ok,"pesan"=>$msg],$x),JSON_UNESCAPED_UNICODE); exit; }
+if($_SERVER["REQUEST_METHOD"]!=="POST") jr(false,"Metode tidak diizinkan.",[],405); if(!isset($_SESSION["siswa_id"])) jr(false,"Sesi login siswa tidak ditemukan.",[],401);
+$siswa=(int)$_SESSION["siswa_id"]; $sid=(int)($_POST["sesi_id"]??0); $uid=(int)($_POST["ujian_id"]??0); $kode=trim((string)($_POST["kode"]??"")); if($sid<=0||$uid<=0||!preg_match('/^\d{6}$/',$kode)) jr(false,"Kode pengawas harus terdiri dari 6 digit.",[],400);
+$conn->begin_transaction(); try {
+$st=$conn->prepare("SELECT id,siswa_id,ujian_id,status,batas_waktu,terkunci_pengawas FROM sesi_ujian WHERE id=? AND siswa_id=? AND ujian_id=? LIMIT 1 FOR UPDATE"); if(!$st) throw new Exception("Gagal memeriksa sesi."); $st->bind_param("iii",$sid,$siswa,$uid); $st->execute(); $s=$st->get_result()->fetch_assoc(); $st->close(); if(!$s) throw new Exception("Sesi ujian tidak valid."); if($s["status"]!=="mengerjakan") throw new Exception("Ujian sudah selesai."); if(strtotime($s["batas_waktu"])<=time()) throw new Exception("Waktu ujian telah habis."); if((int)$s["terkunci_pengawas"]!==1) throw new Exception("Sesi tidak sedang terkunci.");
+$st=$conn->prepare("SELECT id,kode FROM kode_pengawas_ujian WHERE sesi_id=? AND status='aktif' ORDER BY id DESC LIMIT 1 FOR UPDATE"); if(!$st) throw new Exception("Gagal memeriksa kode pengawas."); $st->bind_param("i",$sid); $st->execute(); $r=$st->get_result()->fetch_assoc(); $st->close(); if(!$r||!hash_equals((string)$r["kode"],$kode)) throw new Exception("Kode pengawas salah atau sudah tidak berlaku.");
+$kid=(int)$r["id"]; $st=$conn->prepare("UPDATE kode_pengawas_ujian SET status='digunakan',digunakan=NOW() WHERE id=? AND sesi_id=? AND status='aktif'"); if(!$st) throw new Exception("Gagal memproses kode pengawas."); $st->bind_param("ii",$kid,$sid); if(!$st->execute()||$st->affected_rows!==1) throw new Exception("Kode pengawas tidak dapat digunakan."); $st->close();
+$st=$conn->prepare("UPDATE sesi_ujian SET terkunci_pengawas=0 WHERE id=? AND siswa_id=? AND ujian_id=? AND status='mengerjakan'"); if(!$st) throw new Exception("Gagal membuka kunci sesi."); $st->bind_param("iii",$sid,$siswa,$uid); if(!$st->execute()||$st->affected_rows!==1) throw new Exception("Sesi gagal dibuka."); $st->close(); $conn->commit(); jr(true,"Kode pengawas benar.",["terkunci_pengawas"=>false]);
+} catch(Throwable $e){$conn->rollback();jr(false,$e->getMessage(),[],400);}
+?>

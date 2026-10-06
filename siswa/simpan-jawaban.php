@@ -4,7 +4,16 @@ session_start();
 
 require_once "../config/database.php";
 
-header("Content-Type: application/json");
+header("Content-Type: application/json; charset=UTF-8");
+header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+
+if ($_SERVER["REQUEST_METHOD"] !== "POST") {
+    echo json_encode([
+        "status" => false,
+        "pesan" => "Metode tidak diizinkan."
+    ]);
+    exit;
+}
 
 if (!isset($_SESSION["siswa_id"])) {
     echo json_encode([
@@ -14,7 +23,7 @@ if (!isset($_SESSION["siswa_id"])) {
     exit;
 }
 
-$siswa_id = $_SESSION["siswa_id"];
+$siswa_id = (int) $_SESSION["siswa_id"];
 
 /*
 |--------------------------------------------------------------------------
@@ -33,16 +42,24 @@ if (!$data) {
 }
 
 $sesi_id = isset($data["sesi_id"])
-    ? (int)$data["sesi_id"]
+    ? (int) $data["sesi_id"]
     : 0;
 
 $soal_id = isset($data["soal_id"])
-    ? (int)$data["soal_id"]
+    ? (int) $data["soal_id"]
     : 0;
 
 $opsi_id = isset($data["opsi_id"])
-    ? (int)$data["opsi_id"]
+    ? (int) $data["opsi_id"]
     : 0;
+
+if ($sesi_id <= 0 || $soal_id <= 0 || $opsi_id <= 0) {
+    echo json_encode([
+        "status" => false,
+        "pesan" => "Data jawaban tidak lengkap."
+    ]);
+    exit;
+}
 
 
 /*
@@ -60,6 +77,14 @@ $stmt = $conn->prepare("
     LIMIT 1
 ");
 
+if (!$stmt) {
+    echo json_encode([
+        "status" => false,
+        "pesan" => "Sistem gagal memeriksa sesi."
+    ]);
+    exit;
+}
+
 $stmt->bind_param(
     "ii",
     $sesi_id,
@@ -70,35 +95,29 @@ $stmt->execute();
 
 $sesi = $stmt->get_result()->fetch_assoc();
 
-if (!$sesi) {
+$stmt->close();
 
+if (!$sesi) {
     echo json_encode([
         "status" => false,
         "pesan" => "Sesi ujian tidak valid."
     ]);
-
     exit;
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| KUNCI PENGAWAS
-|--------------------------------------------------------------------------
-|
-| Status sesi tetap "mengerjakan" saat terkunci agar timer/auto-kirim
-| tetap berjalan. Tetapi jawaban TIDAK boleh disimpan sampai pengawas
-| membuka kunci.
+| LEVEL 15 — Pastikan sesi belum dikunci pengawas
 |--------------------------------------------------------------------------
 */
 
 if ((int) ($sesi["terkunci_pengawas"] ?? 0) === 1) {
-
     echo json_encode([
         "status" => false,
-        "pesan" => "Ujian sedang terkunci. Masukkan Kode Pengawas terlebih dahulu."
+        "terkunci_pengawas" => true,
+        "pesan" => "Ujian sedang dikunci oleh pengawas. Masukkan Kode Pengawas terlebih dahulu."
     ]);
-
     exit;
 }
 
@@ -110,12 +129,10 @@ if ((int) ($sesi["terkunci_pengawas"] ?? 0) === 1) {
 */
 
 if (strtotime($sesi["batas_waktu"]) <= time()) {
-
     echo json_encode([
         "status" => false,
         "pesan" => "Waktu ujian telah habis."
     ]);
-
     exit;
 }
 
@@ -134,6 +151,14 @@ $stmt = $conn->prepare("
     LIMIT 1
 ");
 
+if (!$stmt) {
+    echo json_encode([
+        "status" => false,
+        "pesan" => "Sistem gagal memeriksa soal."
+    ]);
+    exit;
+}
+
 $stmt->bind_param(
     "ii",
     $soal_id,
@@ -144,13 +169,13 @@ $stmt->execute();
 
 $cekSoal = $stmt->get_result()->fetch_assoc();
 
-if (!$cekSoal) {
+$stmt->close();
 
+if (!$cekSoal) {
     echo json_encode([
         "status" => false,
         "pesan" => "Soal tidak valid."
     ]);
-
     exit;
 }
 
@@ -169,6 +194,14 @@ $stmt = $conn->prepare("
     LIMIT 1
 ");
 
+if (!$stmt) {
+    echo json_encode([
+        "status" => false,
+        "pesan" => "Sistem gagal memeriksa pilihan jawaban."
+    ]);
+    exit;
+}
+
 $stmt->bind_param(
     "ii",
     $opsi_id,
@@ -179,13 +212,13 @@ $stmt->execute();
 
 $cekOpsi = $stmt->get_result()->fetch_assoc();
 
-if (!$cekOpsi) {
+$stmt->close();
 
+if (!$cekOpsi) {
     echo json_encode([
         "status" => false,
         "pesan" => "Pilihan jawaban tidak valid."
     ]);
-
     exit;
 }
 
@@ -193,6 +226,8 @@ if (!$cekOpsi) {
 /*
 |--------------------------------------------------------------------------
 | Simpan / update jawaban
+|
+| MEKANISME INI DIPERTAHANKAN SAMA DENGAN FILE LAMA
 |--------------------------------------------------------------------------
 */
 
@@ -208,6 +243,14 @@ $stmt = $conn->prepare("
     ON DUPLICATE KEY UPDATE
         opsi_id = VALUES(opsi_id)
 ");
+
+if (!$stmt) {
+    echo json_encode([
+        "status" => false,
+        "pesan" => "Sistem gagal menyiapkan penyimpanan jawaban."
+    ]);
+    exit;
+}
 
 $stmt->bind_param(
     "iii",
@@ -230,5 +273,7 @@ if ($stmt->execute()) {
         "pesan" => "Jawaban gagal disimpan."
     ]);
 }
+
+$stmt->close();
 
 ?>

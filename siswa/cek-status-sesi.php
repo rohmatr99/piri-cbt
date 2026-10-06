@@ -5,15 +5,20 @@ session_start();
 require_once "../config/database.php";
 
 header("Content-Type: application/json; charset=utf-8");
+header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+header("Pragma: no-cache");
+header("Expires: 0");
 
 
 /*
-|--------------------------------------------------------------------------
+|----------------------------------------------------------------------
 | CEK LOGIN SISWA
-|--------------------------------------------------------------------------
+|----------------------------------------------------------------------
 */
 
 if (!isset($_SESSION["siswa_id"])) {
+
+    http_response_code(401);
 
     echo json_encode([
         "status" => false,
@@ -23,31 +28,53 @@ if (!isset($_SESSION["siswa_id"])) {
     exit;
 }
 
-
 $siswa_id = (int) $_SESSION["siswa_id"];
 
 
 /*
-|--------------------------------------------------------------------------
-| AMBIL PARAMETER
-|--------------------------------------------------------------------------
+|----------------------------------------------------------------------
+| HANYA TERIMA GET
+|----------------------------------------------------------------------
+|
+| ujian.php saat ini memanggil endpoint ini menggunakan GET.
+| Jangan mengubah menjadi POST agar client yang sudah berjalan
+| tetap kompatibel.
+|
 */
 
-$sesi_id =
-    isset($_GET["sesi_id"])
-        ? (int) $_GET["sesi_id"]
-        : 0;
+if ($_SERVER["REQUEST_METHOD"] !== "GET") {
 
-$ujian_id =
-    isset($_GET["ujian_id"])
-        ? (int) $_GET["ujian_id"]
-        : 0;
+    http_response_code(405);
+
+    header("Allow: GET");
+
+    echo json_encode([
+        "status" => false,
+        "pesan" => "Metode tidak diizinkan."
+    ]);
+
+    exit;
+}
 
 
-if (
-    $sesi_id <= 0 ||
-    $ujian_id <= 0
-) {
+/*
+|----------------------------------------------------------------------
+| AMBIL PARAMETER
+|----------------------------------------------------------------------
+*/
+
+$sesi_id = isset($_GET["sesi_id"])
+    ? (int) $_GET["sesi_id"]
+    : 0;
+
+$ujian_id = isset($_GET["ujian_id"])
+    ? (int) $_GET["ujian_id"]
+    : 0;
+
+
+if ($sesi_id <= 0 || $ujian_id <= 0) {
+
+    http_response_code(400);
 
     echo json_encode([
         "status" => false,
@@ -59,9 +86,18 @@ if (
 
 
 /*
-|--------------------------------------------------------------------------
+|----------------------------------------------------------------------
 | AMBIL STATUS SESI MILIK SISWA
-|--------------------------------------------------------------------------
+|----------------------------------------------------------------------
+|
+| Identitas siswa TIDAK dipercaya dari parameter browser.
+| Siswa diambil dari PHP session.
+|
+| Endpoint hanya dapat membaca sesi yang:
+| - sesuai sesi_id
+| - milik siswa yang sedang login
+| - sesuai ujian_id
+|
 */
 
 $stmt = $conn->prepare("
@@ -90,6 +126,18 @@ $stmt = $conn->prepare("
     LIMIT 1
 ");
 
+if (!$stmt) {
+
+    http_response_code(500);
+
+    echo json_encode([
+        "status" => false,
+        "pesan" => "Gagal menyiapkan pemeriksaan sesi."
+    ]);
+
+    exit;
+}
+
 $stmt->bind_param(
     "iii",
     $sesi_id,
@@ -97,15 +145,32 @@ $stmt->bind_param(
     $ujian_id
 );
 
-$stmt->execute();
+if (!$stmt->execute()) {
 
-$sesi =
-    $stmt
-        ->get_result()
-        ->fetch_assoc();
+    http_response_code(500);
 
+    echo json_encode([
+        "status" => false,
+        "pesan" => "Gagal memeriksa status sesi."
+    ]);
+
+    exit;
+}
+
+$sesi = $stmt
+    ->get_result()
+    ->fetch_assoc();
+
+
+/*
+|----------------------------------------------------------------------
+| SESI TIDAK DITEMUKAN / BUKAN MILIK SISWA
+|----------------------------------------------------------------------
+*/
 
 if (!$sesi) {
+
+    http_response_code(403);
 
     echo json_encode([
         "status" => false,
@@ -117,14 +182,13 @@ if (!$sesi) {
 
 
 /*
-|--------------------------------------------------------------------------
+|----------------------------------------------------------------------
 | JIKA STATUS MASIH MENGERJAKAN TETAPI WAKTU HABIS
-|--------------------------------------------------------------------------
+|----------------------------------------------------------------------
 |
-| Pengaman tambahan agar status server konsisten.
-| Proses hasil lengkap tetap ditangani oleh auto-kirim.php ketika
-| halaman ujian diarahkan ke sana.
-|--------------------------------------------------------------------------
+| Jangan membuat hasil di endpoint ini.
+| Alur hasil tetap menggunakan auto-kirim.php seperti sebelumnya.
+|
 */
 
 if (
@@ -132,12 +196,6 @@ if (
     !empty($sesi["batas_waktu"]) &&
     strtotime($sesi["batas_waktu"]) <= time()
 ) {
-
-    /*
-    | Jangan membuat hasil di sini.
-    | Arahkan client ke auto-kirim.php agar alur waktu habis
-    | tetap menggunakan mekanisme yang sudah ada.
-    */
 
     echo json_encode([
         "status" => true,
@@ -154,9 +212,9 @@ if (
 
 
 /*
-|--------------------------------------------------------------------------
-| RESPONSE
-|--------------------------------------------------------------------------
+|----------------------------------------------------------------------
+| RESPONSE STATUS SESI
+|----------------------------------------------------------------------
 */
 
 echo json_encode([
